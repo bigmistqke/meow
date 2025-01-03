@@ -1,24 +1,56 @@
 import {
-  Classifications,
   DrawingUtils,
   FaceLandmarker,
   FaceLandmarkerResult,
   FilesetResolver,
 } from '@mediapipe/tasks-vision'
 import { createEffect, createResource, createSignal, For, type Component } from 'solid-js'
+import * as THREE from 'three'
+import { GLTFLoader, MeshoptDecoder, OrbitControls } from 'three-stdlib'
+import avatar from './assets/avatar.glb?url'
+
+// Utility function to calculate angles
+function calculateHeadRotation(landmarks: Array<THREE.Vector3>) {
+  const [leftEye, rightEye, noseTip] = [
+    new THREE.Vector3(...landmarks[FaceLandmarker.FACE_LANDMARKS_LEFT_EYE_CENTER]),
+    new THREE.Vector3(...landmarks[FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE_CENTER]),
+    new THREE.Vector3(...landmarks[FaceLandmarker.FACE_LANDMARKS_NOSE_TIP]),
+  ]
+
+  // Compute directional vectors
+  const eyeDirection = new THREE.Vector3().subVectors(rightEye, leftEye).normalize()
+  const headDirection = new THREE.Vector3().subVectors(noseTip, leftEye).normalize()
+
+  // Estimate yaw (horizontal rotation)
+  const yaw = Math.atan2(eyeDirection.y, eyeDirection.x)
+
+  // Estimate pitch (vertical rotation)
+  const pitch = Math.asin(eyeDirection.z)
+
+  // Estimate roll (tilt rotation)
+  const roll = Math.atan2(headDirection.y, headDirection.z)
+
+  return { pitch, yaw, roll }
+}
 
 const App: Component = () => {
   const [enabled, setEnabled] = createSignal(false)
-  const [blendShapes, setBlendShapes] = createSignal<Array<Classifications>>()
+  const [faceLandmarkerResults, setFaceLandmarkerResults] = createSignal<FaceLandmarkerResult>()
 
   const videoWidth = 480
   const video = (<video />) as HTMLVideoElement
-  const canvasElement = (
+  const mediaPipeCanvas = (
     <canvas
       style={{ position: 'absolute', top: '0px', bottom: '0px', left: '0px', right: '0px' }}
     />
   ) as HTMLCanvasElement
-  const ctx = canvasElement.getContext('2d')!
+  const mediaPipeCtx = mediaPipeCanvas.getContext('2d')!
+
+  const threeCanvas = (
+    <canvas
+      style={{ position: 'absolute', top: '0px', bottom: '0px', left: '0px', right: '0px' }}
+    />
+  ) as HTMLCanvasElement
 
   // Before we can use HandLandmarker class we must wait for it to finish
   // loading. Machine Learning models can be large and take a moment to
@@ -50,18 +82,18 @@ const App: Component = () => {
       const radio = video.videoHeight / video.videoWidth
       video.style.width = videoWidth + 'px'
       video.style.height = videoWidth * radio + 'px'
-      canvasElement.style.width = videoWidth + 'px'
-      canvasElement.style.height = videoWidth * radio + 'px'
-      canvasElement.width = video.videoWidth
-      canvasElement.height = video.videoHeight
+      mediaPipeCanvas.style.width = videoWidth + 'px'
+      mediaPipeCanvas.style.height = videoWidth * radio + 'px'
+      mediaPipeCanvas.width = video.videoWidth
+      mediaPipeCanvas.height = video.videoHeight
     })
   }
 
   let lastVideoTime = -1
   let results: undefined | FaceLandmarkerResult = undefined
-  const drawingUtils = new DrawingUtils(ctx)
+  const drawingUtils = new DrawingUtils(mediaPipeCtx)
   async function predictWebcam(faceLandmarker: FaceLandmarker) {
-    ctx.clearRect(0, 0, video.videoWidth, video.videoHeight)
+    mediaPipeCtx.clearRect(0, 0, video.videoWidth, video.videoHeight)
 
     let startTimeMs = performance.now()
     if (lastVideoTime !== video.currentTime) {
@@ -101,7 +133,7 @@ const App: Component = () => {
       }
     }
 
-    setBlendShapes(results?.faceBlendshapes)
+    setFaceLandmarkerResults(results!)
 
     // Call this function again to keep predicting when the browser is ready.
     if (enabled()) {
@@ -109,9 +141,71 @@ const App: Component = () => {
     }
   }
 
+  const scene = new THREE.Scene()
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
+
+  const ambient = new THREE.AmbientLight()
+  ambient.color = new THREE.Color('white')
+  ambient.intensity = 1
+  scene.add(ambient)
+
+  const spot = new THREE.SpotLight()
+  spot.color = new THREE.Color('white')
+  spot.position.set(3, 3, 3)
+  spot.decay = 0.5
+  spot.intensity = 1
+  spot.lookAt(new THREE.Vector3())
+  scene.add(spot)
+
+  camera.position.z = 1
+
+  const renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, alpha: true })
+  renderer.setSize(window.innerWidth, window.innerHeight)
+
+  const controls = new OrbitControls(camera, renderer.domElement)
+
+  const loader = new GLTFLoader()
+  loader.setMeshoptDecoder(MeshoptDecoder)
+  loader.load(avatar, model => {
+    model.scene.rotateY(Math.PI)
+    scene.add(model.scene)
+    scene.scale.x = 3
+    scene.scale.y = 3
+    scene.scale.z = 3
+    const hair = model.scene.children[0] as THREE.Mesh
+
+    hair.material = new THREE.MeshPhongMaterial()
+    const faceParts = model.scene.children[1]?.children as Array<THREE.Mesh>
+
+    faceParts.forEach(face => {
+      if (face.name !== 'Facebaked_custom003_5') {
+        face.material.depthWrite = true
+        face.material.transparent = false
+      }
+      face.material.side = THREE.FrontSide
+    })
+
+    createEffect(() => {
+      faceLandmarkerResults()?.faceBlendshapes[0]?.categories.forEach(category => {
+        faceParts.forEach(face => {
+          const name = category.displayName || category.categoryName
+          const index = face.morphTargetDictionary![name] as number
+          face.morphTargetInfluences![index] = category.score
+        })
+      })
+    })
+  })
+
+  function animate() {
+    renderer.render(scene, camera)
+    controls.update()
+  }
+  renderer.setAnimationLoop(animate)
+
   createEffect(() => {
     const landmarker = faceLandmarker()
     if (!landmarker) return
+
     createEffect(() => {
       if (enabled()) enableCam(landmarker)
     })
@@ -127,7 +221,8 @@ const App: Component = () => {
       }}
     >
       <div style={{ position: 'relative', overflow: 'hidden' }}>
-        {canvasElement}
+        {mediaPipeCanvas}
+        {threeCanvas}
         {video}
       </div>
       <div
@@ -150,7 +245,7 @@ const App: Component = () => {
             'grid-template-columns': '1fr 60px',
           }}
         >
-          <For each={blendShapes()?.[0]?.categories}>
+          <For each={faceLandmarkerResults()?.faceBlendshapes[0]?.categories}>
             {shape => (
               <>
                 <span>{shape.displayName || shape.categoryName}</span>
