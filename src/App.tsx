@@ -4,7 +4,7 @@ import {
   FaceLandmarkerResult,
   FilesetResolver,
 } from '@mediapipe/tasks-vision'
-import { createEffect, createResource, createSignal, For, type Component } from 'solid-js'
+import { createEffect, createResource, createSignal, For, onMount, type Component } from 'solid-js'
 import * as THREE from 'three'
 import { GLTFLoader, MeshoptDecoder, OrbitControls } from 'three-stdlib'
 import avatar from './assets/avatar.glb?url'
@@ -37,7 +37,7 @@ const App: Component = () => {
   const [enabled, setEnabled] = createSignal(false)
   const [faceLandmarkerResults, setFaceLandmarkerResults] = createSignal<FaceLandmarkerResult>()
 
-  const videoWidth = 480
+  const videoWidth = 480 / 4
   const video = (<video />) as HTMLVideoElement
   const mediaPipeCanvas = (
     <canvas
@@ -45,7 +45,6 @@ const App: Component = () => {
     />
   ) as HTMLCanvasElement
   const mediaPipeCtx = mediaPipeCanvas.getContext('2d')!
-
   const threeCanvas = (
     <canvas
       style={{ position: 'absolute', top: '0px', bottom: '0px', left: '0px', right: '0px' }}
@@ -65,6 +64,7 @@ const App: Component = () => {
         delegate: 'GPU',
       },
       outputFaceBlendshapes: true,
+      outputFacialTransformationMatrixes: true,
       runningMode: 'VIDEO',
       numFaces: 1,
     })
@@ -167,8 +167,8 @@ const App: Component = () => {
   const loader = new GLTFLoader()
   loader.setMeshoptDecoder(MeshoptDecoder)
   loader.load(avatar, model => {
-    model.scene.rotateY(Math.PI)
     scene.add(model.scene)
+    scene.rotateY(Math.PI)
     scene.scale.x = 3
     scene.scale.y = 3
     scene.scale.z = 3
@@ -186,7 +186,13 @@ const App: Component = () => {
     })
 
     createEffect(() => {
-      faceLandmarkerResults()?.faceBlendshapes[0]?.categories.forEach(category => {
+      const results = faceLandmarkerResults()
+      if (!results) return
+      const matrix = faceLandmarkerResults()?.facialTransformationMatrixes[0]?.data
+      if (matrix) {
+        model.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
+      }
+      results.faceBlendshapes[0]?.categories.forEach(category => {
         faceParts.forEach(face => {
           const name = category.displayName || category.categoryName
           const index = face.morphTargetDictionary![name] as number
@@ -220,10 +226,27 @@ const App: Component = () => {
         overflow: 'hidden',
       }}
     >
-      <div style={{ position: 'relative', overflow: 'hidden' }}>
-        {mediaPipeCanvas}
+      <div
+        style={{ position: 'relative', overflow: 'hidden' }}
+        ref={element => {
+          onMount(() => {
+            const observer = new ResizeObserver(() => {
+              console.log('resize element!')
+              const bounds = element.getBoundingClientRect()
+              camera.aspect = bounds.width / bounds.height
+              camera.updateProjectionMatrix()
+              renderer.setSize(bounds.width, bounds.height)
+              renderer.render(scene, camera)
+            })
+            observer.observe(element)
+          })
+        }}
+      >
+        <div style={{ position: 'fixed', bottom: '0px', left: '0px', 'z-index': 1 }}>
+          {mediaPipeCanvas}
+          {video}
+        </div>
         {threeCanvas}
-        {video}
       </div>
       <div
         style={{
@@ -233,9 +256,12 @@ const App: Component = () => {
           'grid-template-rows': '30px 1fr',
         }}
       >
-        <button disabled={!faceLandmarker()} onClick={() => setEnabled(enabled => !enabled)}>
-          enable webcam
-        </button>
+        <div>
+          {/* <button onClick={}>open model</button> */}
+          <button disabled={!faceLandmarker()} onClick={() => setEnabled(enabled => !enabled)}>
+            enable webcam
+          </button>
+        </div>
         <div
           style={{
             overflow: 'auto',
