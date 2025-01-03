@@ -17,6 +17,5 @@
     "jsxImportSource": "solid-js",
     "types": ["vite/client"],
     "baseUrl": "."
-  },
-  "exclude": ["node_modules", "dist", "src"]
+  }
 }

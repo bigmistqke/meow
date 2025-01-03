@@ -1,59 +1,239 @@
+import { FaceLandmarker, FaceLandmarkerResult, FilesetResolver } from '@mediapipe/tasks-vision'
 import {
-  DrawingUtils,
-  FaceLandmarker,
-  FaceLandmarkerResult,
-  FilesetResolver,
-} from '@mediapipe/tasks-vision'
-import { createEffect, createResource, createSignal, For, onMount, type Component } from 'solid-js'
+  createEffect,
+  createResource,
+  createSignal,
+  For,
+  mapArray,
+  onMount,
+  Setter,
+  Show,
+  type Component,
+} from 'solid-js'
+import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import * as THREE from 'three'
-import { GLTFLoader, MeshoptDecoder, OrbitControls } from 'three-stdlib'
+import { GLTF, GLTFLoader, OrbitControls } from 'three-stdlib'
 import avatar from './assets/avatar.glb?url'
+import webcam from './extensions/webcam'
+import type { Extension, MeowState } from './types'
+import { traverse } from './utils/traverse'
 
-// Utility function to calculate angles
-function calculateHeadRotation(landmarks: Array<THREE.Vector3>) {
-  const [leftEye, rightEye, noseTip] = [
-    new THREE.Vector3(...landmarks[FaceLandmarker.FACE_LANDMARKS_LEFT_EYE_CENTER]),
-    new THREE.Vector3(...landmarks[FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE_CENTER]),
-    new THREE.Vector3(...landmarks[FaceLandmarker.FACE_LANDMARKS_NOSE_TIP]),
-  ]
+const BUILTINS = { webcam }
 
-  // Compute directional vectors
-  const eyeDirection = new THREE.Vector3().subVectors(rightEye, leftEye).normalize()
-  const headDirection = new THREE.Vector3().subVectors(noseTip, leftEye).normalize()
+function createThreeManager() {
+  const [gltf, setGltf] = createSignal<GLTF>()
+  const canvas = (
+    <canvas
+      style={{ position: 'absolute', top: '0px', bottom: '0px', left: '0px', right: '0px' }}
+    />
+  ) as HTMLCanvasElement
 
-  // Estimate yaw (horizontal rotation)
-  const yaw = Math.atan2(eyeDirection.y, eyeDirection.x)
+  const renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true })
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
+  const scene = new THREE.Scene()
+  const loader = new GLTFLoader()
+  const controls = new OrbitControls(camera, renderer.domElement)
 
-  // Estimate pitch (vertical rotation)
-  const pitch = Math.asin(eyeDirection.z)
+  renderer.setSize(window.innerWidth, window.innerHeight)
+  camera.position.z = 1
 
-  // Estimate roll (tilt rotation)
-  const roll = Math.atan2(headDirection.y, headDirection.z)
+  const ambient = new THREE.AmbientLight()
+  ambient.color = new THREE.Color('white')
+  ambient.intensity = 1
+  scene.add(ambient)
 
-  return { pitch, yaw, roll }
+  const spot = new THREE.SpotLight()
+  spot.color = new THREE.Color('white')
+  spot.position.set(3, 3, 3)
+  spot.decay = 0.5
+  spot.intensity = 1
+  spot.lookAt(new THREE.Vector3())
+  scene.add(spot)
+
+  createEffect(() => {
+    const _gltf = gltf()
+
+    // NOTE: this hardcoded stuff should be removed and replaced by an extension
+    if (_gltf) {
+      scene.add(_gltf.scene)
+      scene.rotateY(Math.PI)
+      scene.scale.x = 3
+      scene.scale.y = 3
+      scene.scale.z = 3
+      const hair = _gltf.scene.children[0] as THREE.Mesh
+
+      hair.material = new THREE.MeshPhongMaterial()
+      const faceParts = _gltf.scene.children[1]?.children as Array<THREE.Mesh>
+
+      faceParts.forEach(face => {
+        if (face.name !== 'Facebaked_custom003_5') {
+          face.material.depthWrite = true
+          face.material.transparent = false
+        }
+        face.material.side = THREE.FrontSide
+      })
+    }
+  })
+
+  return {
+    gltf,
+    canvas,
+    scene,
+    loadFromUrl(url: string) {
+      loader.load(url, setGltf)
+    },
+    loadFromBinary(arrayBuffer: ArrayBuffer) {
+      loader.parse(arrayBuffer, '', setGltf)
+    },
+    render: () => {
+      renderer.render(scene, camera)
+      controls.update()
+    },
+    renderer,
+    resize(domRect: DOMRect) {
+      camera.aspect = domRect.width / domRect.height
+      camera.updateProjectionMatrix()
+      renderer.setSize(domRect.width, domRect.height)
+      renderer.render(scene, camera)
+    },
+    updatePrediction({ facialTransformationMatrixes, faceBlendshapes }: FaceLandmarkerResult) {
+      const _gltf = gltf()
+      if (!_gltf) return
+
+      const matrix = facialTransformationMatrixes[0]?.data as THREE.Matrix4Tuple
+      if (matrix) {
+        _gltf.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
+      }
+      faceBlendshapes[0]?.categories.forEach(category => {
+        const name = category.displayName || category.categoryName
+        traverse(_gltf.scene, face => {
+          if (
+            face instanceof THREE.Mesh &&
+            face.morphTargetDictionary &&
+            face.morphTargetInfluences
+          ) {
+            const index = face.morphTargetDictionary[name] as number
+            face.morphTargetInfluences[index] = category.score
+          }
+        })
+      })
+    },
+  }
+}
+
+function EditorPane(props: {
+  enabled: boolean
+  setEnabled: Setter<boolean>
+  extensions: Array<Extension>
+  setExtensions: SetStoreFunction<Array<Extension>>
+  state: MeowState
+  threeManager: ReturnType<typeof createThreeManager>
+}) {
+  const [addOpened, setAddOpened] = createSignal()
+  let fileInput: HTMLInputElement
+
+  function handleLoadLocalModel(event: InputEvent & { currentTarget: HTMLInputElement }) {
+    const file = event.currentTarget.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = function (event) {
+        const arrayBuffer = event.target!.result as ArrayBuffer
+        props.threeManager.loadFromBinary(arrayBuffer)
+      }
+      reader.readAsArrayBuffer(file)
+    }
+  }
+
+  return (
+    <>
+      <div
+        style={{
+          overflow: 'hidden',
+          'border-left': '1px solid black',
+          display: 'grid',
+          'grid-template-rows': '30px 1fr',
+          'align-items': 'start',
+        }}
+      >
+        <div style={{ display: 'grid', 'grid-template-columns': '1fr 1fr' }}>
+          <button onClick={() => props.setEnabled(enabled => !enabled)}>
+            {props.enabled ? 'disable' : 'enable'} cam
+          </button>
+          <button
+            onClick={() => {
+              fileInput!.click()
+            }}
+          >
+            upload model
+          </button>
+          <input hidden type="file" ref={fileInput!} onInput={handleLoadLocalModel} />
+        </div>
+        <div style={{ display: 'grid' }}>
+          <For each={props.extensions}>
+            {(extension, index) => (
+              <section style={{ display: 'grid', padding: '5px', gap: '5px' }}>
+                <div style={{ display: 'grid', 'grid-template-columns': '1fr auto' }}>
+                  <div>{extension.name}</div>
+                  <button
+                    onClick={() =>
+                      props.setExtensions(produce(extensions => extensions.splice(index(), 1)))
+                    }
+                  >
+                    x
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gap: '5px' }}>{extension.widget?.(props.state)}</div>
+              </section>
+            )}
+          </For>
+          <button onClick={() => setAddOpened(bool => !bool)}>
+            {!addOpened() ? 'add' : 'close'}
+          </button>
+          <div style={{ padding: '5px', display: 'grid', gap: '5px' }}>
+            <Show when={addOpened()}>
+              <For each={Object.entries(BUILTINS)}>
+                {([name, extension]) => (
+                  <button
+                    onClick={() => {
+                      props.setExtensions(
+                        produce(extensions =>
+                          extensions.push(
+                            typeof extension === 'function' ? extension() : extension,
+                          ),
+                        ),
+                      )
+                      setAddOpened(false)
+                    }}
+                  >
+                    {name}
+                  </button>
+                )}
+              </For>
+            </Show>
+          </div>
+        </div>
+      </div>
+    </>
+  )
 }
 
 const App: Component = () => {
-  const [enabled, setEnabled] = createSignal(false)
-  const [faceLandmarkerResults, setFaceLandmarkerResults] = createSignal<FaceLandmarkerResult>()
+  const threeManager = createThreeManager()
+  const video = (<video hidden />) as HTMLVideoElement
 
-  const videoWidth = 480 / 4
-  const video = (<video />) as HTMLVideoElement
-  const mediaPipeCanvas = (
-    <canvas
-      style={{ position: 'absolute', top: '0px', bottom: '0px', left: '0px', right: '0px' }}
-    />
-  ) as HTMLCanvasElement
-  const mediaPipeCtx = mediaPipeCanvas.getContext('2d')!
-  const threeCanvas = (
-    <canvas
-      style={{ position: 'absolute', top: '0px', bottom: '0px', left: '0px', right: '0px' }}
-    />
-  ) as HTMLCanvasElement
+  const [state, setState] = createStore<MeowState>({
+    get gltf() {
+      return threeManager.gltf()
+    },
+    prediction: undefined,
+    scene: threeManager.scene,
+    stream: undefined,
+  })
 
-  // Before we can use HandLandmarker class we must wait for it to finish
-  // loading. Machine Learning models can be large and take a moment to
-  // get everything needed to run.
+  const [enabled, setEnabled] = createSignal(true)
+  const [videoLoaded, setVideoLoaded] = createSignal(false)
+  const [extensions, setExtensions] = createStore<Array<Extension>>([webcam()])
+
   const [faceLandmarker] = createResource(async function createFaceLandmarker() {
     const filesetResolver = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm',
@@ -70,152 +250,66 @@ const App: Component = () => {
     })
   })
 
-  // Enable the live webcam view and start detection.
+  /* Predict */
+  let lastVideoTime = -1
+  let prediction: undefined | FaceLandmarkerResult = undefined
+  function predict(timestamp: number) {
+    const landmarker = faceLandmarker()
+    if (!landmarker || !enabled()) return
+    if (lastVideoTime !== video.currentTime || !prediction) {
+      prediction = landmarker.detectForVideo(video, timestamp)
+      lastVideoTime = video.currentTime
+    }
+    setState({ prediction })
+    threeManager.updatePrediction(prediction)
+  }
+
+  /* Animation loop */
+  function animate(timestamp: number) {
+    threeManager.render()
+    if (videoLoaded()) {
+      predict(timestamp)
+    }
+    // Update all extensions
+    extensions.forEach(extension => extension.tick?.(state))
+  }
+  threeManager.renderer.setAnimationLoop(animate)
+
+  /* Enable the live webcam view and start detection. */
   async function enableCam(faceLandmarker: FaceLandmarker) {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
     })
     video.srcObject = stream
+    setState({ stream })
     video.addEventListener('loadeddata', () => {
-      predictWebcam(faceLandmarker)
       video.play()
-      const radio = video.videoHeight / video.videoWidth
-      video.style.width = videoWidth + 'px'
-      video.style.height = videoWidth * radio + 'px'
-      mediaPipeCanvas.style.width = videoWidth + 'px'
-      mediaPipeCanvas.style.height = videoWidth * radio + 'px'
-      mediaPipeCanvas.width = video.videoWidth
-      mediaPipeCanvas.height = video.videoHeight
+      setVideoLoaded(true)
     })
   }
-
-  let lastVideoTime = -1
-  let results: undefined | FaceLandmarkerResult = undefined
-  const drawingUtils = new DrawingUtils(mediaPipeCtx)
-  async function predictWebcam(faceLandmarker: FaceLandmarker) {
-    mediaPipeCtx.clearRect(0, 0, video.videoWidth, video.videoHeight)
-
-    let startTimeMs = performance.now()
-    if (lastVideoTime !== video.currentTime) {
-      lastVideoTime = video.currentTime
-      results = faceLandmarker!.detectForVideo(video, startTimeMs)
-    }
-    if (results?.faceLandmarks) {
-      for (const landmarks of results.faceLandmarks) {
-        drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
-          color: '#C0C0C070',
-          lineWidth: 1,
-        })
-        drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE, {
-          color: '#FF3030',
-        })
-        drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW, {
-          color: '#FF3030',
-        })
-        drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, {
-          color: '#30FF30',
-        })
-        drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, {
-          color: '#30FF30',
-        })
-        drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, {
-          color: '#E0E0E0',
-        })
-        drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LIPS, {
-          color: '#E0E0E0',
-        })
-        drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS, {
-          color: '#FF3030',
-        })
-        drawingUtils.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS, {
-          color: '#30FF30',
-        })
-      }
-    }
-
-    setFaceLandmarkerResults(results!)
-
-    // Call this function again to keep predicting when the browser is ready.
-    if (enabled()) {
-      window.requestAnimationFrame(() => predictWebcam(faceLandmarker))
-    }
-  }
-
-  const scene = new THREE.Scene()
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
-
-  const ambient = new THREE.AmbientLight()
-  ambient.color = new THREE.Color('white')
-  ambient.intensity = 1
-  scene.add(ambient)
-
-  const spot = new THREE.SpotLight()
-  spot.color = new THREE.Color('white')
-  spot.position.set(3, 3, 3)
-  spot.decay = 0.5
-  spot.intensity = 1
-  spot.lookAt(new THREE.Vector3())
-  scene.add(spot)
-
-  camera.position.z = 1
-
-  const renderer = new THREE.WebGLRenderer({ canvas: threeCanvas, alpha: true })
-  renderer.setSize(window.innerWidth, window.innerHeight)
-
-  const controls = new OrbitControls(camera, renderer.domElement)
-
-  const loader = new GLTFLoader()
-  loader.setMeshoptDecoder(MeshoptDecoder)
-  loader.load(avatar, model => {
-    scene.add(model.scene)
-    scene.rotateY(Math.PI)
-    scene.scale.x = 3
-    scene.scale.y = 3
-    scene.scale.z = 3
-    const hair = model.scene.children[0] as THREE.Mesh
-
-    hair.material = new THREE.MeshPhongMaterial()
-    const faceParts = model.scene.children[1]?.children as Array<THREE.Mesh>
-
-    faceParts.forEach(face => {
-      if (face.name !== 'Facebaked_custom003_5') {
-        face.material.depthWrite = true
-        face.material.transparent = false
-      }
-      face.material.side = THREE.FrontSide
-    })
-
-    createEffect(() => {
-      const results = faceLandmarkerResults()
-      if (!results) return
-      const matrix = faceLandmarkerResults()?.facialTransformationMatrixes[0]?.data
-      if (matrix) {
-        model.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
-      }
-      results.faceBlendshapes[0]?.categories.forEach(category => {
-        faceParts.forEach(face => {
-          const name = category.displayName || category.categoryName
-          const index = face.morphTargetDictionary![name] as number
-          face.morphTargetInfluences![index] = category.score
-        })
-      })
-    })
-  })
-
-  function animate() {
-    renderer.render(scene, camera)
-    controls.update()
-  }
-  renderer.setAnimationLoop(animate)
 
   createEffect(() => {
     const landmarker = faceLandmarker()
     if (!landmarker) return
 
     createEffect(() => {
-      if (enabled()) enableCam(landmarker)
+      if (enabled()) {
+        enableCam(landmarker)
+      } else {
+        video.pause()
+        setState({ stream: undefined })
+      }
     })
   })
+
+  createEffect(
+    mapArray(
+      () => extensions,
+      extension => extension.setup?.(state),
+    ),
+  )
+
+  onMount(() => threeManager.loadFromUrl(avatar))
 
   return (
     <div
@@ -231,56 +325,26 @@ const App: Component = () => {
         ref={element => {
           onMount(() => {
             const observer = new ResizeObserver(() => {
-              console.log('resize element!')
-              const bounds = element.getBoundingClientRect()
-              camera.aspect = bounds.width / bounds.height
-              camera.updateProjectionMatrix()
-              renderer.setSize(bounds.width, bounds.height)
-              renderer.render(scene, camera)
+              threeManager.resize(element.getBoundingClientRect())
             })
             observer.observe(element)
           })
         }}
       >
-        <div style={{ position: 'fixed', bottom: '0px', left: '0px', 'z-index': 1 }}>
-          {mediaPipeCanvas}
-          {video}
+        <div style={{ position: 'absolute', 'pointer-events': 'none' }}>
+          <For each={extensions}>{extension => extension.overlay?.(state)}</For>
         </div>
-        {threeCanvas}
+        {video}
+        {threeManager.canvas}
       </div>
-      <div
-        style={{
-          overflow: 'hidden',
-          'border-left': '1px solid black',
-          display: 'grid',
-          'grid-template-rows': '30px 1fr',
-        }}
-      >
-        <div>
-          {/* <button onClick={}>open model</button> */}
-          <button disabled={!faceLandmarker()} onClick={() => setEnabled(enabled => !enabled)}>
-            enable webcam
-          </button>
-        </div>
-        <div
-          style={{
-            overflow: 'auto',
-            margin: '0px',
-            padding: '20px',
-            display: 'grid',
-            'grid-template-columns': '1fr 60px',
-          }}
-        >
-          <For each={faceLandmarkerResults()?.faceBlendshapes[0]?.categories}>
-            {shape => (
-              <>
-                <span>{shape.displayName || shape.categoryName}</span>
-                <span>{(+shape.score).toFixed(4)}</span>
-              </>
-            )}
-          </For>
-        </div>
-      </div>
+      <EditorPane
+        enabled={enabled()}
+        extensions={extensions}
+        setEnabled={setEnabled}
+        setExtensions={setExtensions}
+        state={state}
+        threeManager={threeManager}
+      />
     </div>
   )
 }

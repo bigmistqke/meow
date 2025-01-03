@@ -84,8 +84,8 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.18",
+    "solid-js": "^1.6.0",
     "three": "^0.172.0",
-    "three-stdlib": "^2.35.2",
-    "solid-js": "^1.6.0"
+    "three-stdlib": "^2.35.2"
   }
 }
