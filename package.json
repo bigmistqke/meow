@@ -1,5 +1,5 @@
 {
-  "name": "pichucam",
+  "name": "meow",
   "version": "0.0.0",
   "description": "vtube software",
   "license": "MIT",
@@ -7,11 +7,11 @@
   "contributors": [],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bigmistqke/pichucam.git"
+    "url": "git+https://github.com/bigmistqke/meow.git"
   },
-  "homepage": "https://github.com/bigmistqke/pichucam#readme",
+  "homepage": "https://github.com/bigmistqke/meow#readme",
   "bugs": {
-    "url": "https://github.com/bigmistqke/pichucam/issues"
+    "url": "https://github.com/bigmistqke/meow/issues"
   },
   "files": [
     "dist"
