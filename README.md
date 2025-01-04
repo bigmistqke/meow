@@ -4,7 +4,7 @@
 
 - [x] character upload button
   - adds character model
-- [ ] material editor
+- [x] material editor
   - list of all materials
   - allow to be parametrically overridden
 - [ ] blendshape/landmark editor

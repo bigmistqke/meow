@@ -1,5 +1,6 @@
 import { DrawingUtils, FaceLandmarker, FaceLandmarkerResult } from '@mediapipe/tasks-vision'
 import { createEffect, createSignal } from 'solid-js'
+import { Labelled, List } from '../components'
 import { Extension } from '../types'
 
 function drawLandmarks(faceLandmarkerResult: FaceLandmarkerResult, drawingUtils: DrawingUtils) {
@@ -98,26 +99,23 @@ export default (): Extension => {
     },
     widget() {
       return (
-        <>
-          <div style={{ display: 'grid', 'grid-template-columns': '1fr 1fr' }}>
-            <label>width</label>
+        <List>
+          <Labelled label="width">
             <input type="number" value={width()} onInput={e => setWidth(+e.currentTarget.value)} />
-          </div>
-          <div style={{ display: 'grid', 'grid-template-columns': '1fr 1fr' }}>
-            <label>margin</label>
+          </Labelled>
+          <Labelled label="margin">
             <input
               type="number"
               value={margin()}
               onInput={e => setMargin(+e.currentTarget.value)}
             />
-          </div>
-          <div style={{ display: 'grid', 'grid-template-columns': '1fr 1fr' }}>
-            <label>visible</label>
+          </Labelled>
+          <Labelled label="visible">
             <button onClick={() => setVisible(visible => !visible)}>
               {!visible() ? 'hidden' : 'visible'}
             </button>
-          </div>
-        </>
+          </Labelled>
+        </List>
       )
     },
   }

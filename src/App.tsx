@@ -14,11 +14,13 @@ import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import * as THREE from 'three'
 import { GLTF, GLTFLoader, OrbitControls } from 'three-stdlib'
 import avatar from './assets/avatar.glb?url'
+import material from './extensions/material'
 import webcam from './extensions/webcam'
+import styles from './meow.module.css'
 import type { Extension, MeowState } from './types'
 import { traverse } from './utils/traverse'
 
-const BUILTINS = { webcam }
+const BUILTINS = { webcam, material }
 
 function createThreeManager() {
   const [gltf, setGltf] = createSignal<GLTF>()
@@ -151,7 +153,7 @@ function EditorPane(props: {
           overflow: 'hidden',
           'border-left': '1px solid black',
           display: 'grid',
-          'grid-template-rows': '30px 1fr',
+          'grid-template-rows': 'auto 1fr',
           'align-items': 'start',
         }}
       >
@@ -168,12 +170,12 @@ function EditorPane(props: {
           </button>
           <input hidden type="file" ref={fileInput!} onInput={handleLoadLocalModel} />
         </div>
-        <div style={{ display: 'grid' }}>
+        <div style={{ display: 'grid', height: '100%', overflow: 'auto', 'align-items': 'start' }}>
           <For each={props.extensions}>
             {(extension, index) => (
-              <section style={{ display: 'grid', padding: '5px', gap: '5px' }}>
-                <div style={{ display: 'grid', 'grid-template-columns': '1fr auto' }}>
-                  <div>{extension.name}</div>
+              <section class={styles.section}>
+                <header class={styles.sectionHeader}>
+                  <h2>{extension.name}</h2>
                   <button
                     onClick={() =>
                       props.setExtensions(produce(extensions => extensions.splice(index(), 1)))
@@ -181,8 +183,8 @@ function EditorPane(props: {
                   >
                     x
                   </button>
-                </div>
-                <div style={{ display: 'grid', gap: '5px' }}>{extension.widget?.(props.state)}</div>
+                </header>
+                <div>{extension.widget?.(props.state)}</div>
               </section>
             )}
           </For>
@@ -232,7 +234,7 @@ const App: Component = () => {
 
   const [enabled, setEnabled] = createSignal(true)
   const [videoLoaded, setVideoLoaded] = createSignal(false)
-  const [extensions, setExtensions] = createStore<Array<Extension>>([webcam()])
+  const [extensions, setExtensions] = createStore<Array<Extension>>([material(), webcam()])
 
   const [faceLandmarker] = createResource(async function createFaceLandmarker() {
     const filesetResolver = await FilesetResolver.forVisionTasks(
