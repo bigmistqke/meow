@@ -17,6 +17,8 @@
 - [ ] different modes: `editor` and `cinema` mode
   - `editor`: includes hud and threejs editor tools
   - `cinema`: only scene is visible, for streaming/composing purposes
+- [ ] write/edit extensions live
+  - should we use [@bigmistqke/repl](https://github.com/bigmistqke/repl)?
 - [x] extensions/extensible ui-scheme
   - similar to unity's scripts
   - extensions should follow a certain scheme, for example default exporting `interface Extension { setup(): Promise<void>; tick(scene: THREE.Scene, data: FaceLandmarkResults): void; ui(): JSX.Element }`

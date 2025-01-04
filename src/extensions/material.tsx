@@ -13,8 +13,8 @@ export default (): Extension => {
       const [type, setType] = createSignal<
         'MeshBasicMaterial' | 'MeshPhongMaterial' | 'MeshStandardMaterial'
       >(mesh.material.type)
-      const [color, setColor] = createSignal<THREE.Color>(mesh.material.color)
-      const [map, setMap] = createSignal<THREE.Texture>(mesh.material.map)
+      const [color, setColor] = createSignal<THREE.Color>(mesh.material.color, { equals: false })
+      const [map, setMap] = createSignal<THREE.Texture>(mesh.material.map, { equals: false })
 
       function update(type: string, value: any) {
         mesh.material[type] = value
@@ -42,10 +42,6 @@ export default (): Extension => {
       }
     }),
   )
-
-  createEffect(() => {
-    meshes()?.forEach(mesh => console.log(mesh.material))
-  })
 
   return {
     name: 'Material',
@@ -79,7 +75,7 @@ export default (): Extension => {
                   />
                 </Labelled>
                 <Labelled label="color">
-                  <ColorInput color={color()} onInput={setColor} />
+                  <ColorInput value={color()} onInput={setColor} />
                 </Labelled>
                 <Labelled label="map">
                   <TextureInput texture={map()} onInput={setMap} />

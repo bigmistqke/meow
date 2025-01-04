@@ -1,6 +1,6 @@
 import clsx from 'clsx'
 import { For, JSX, Match, onMount, ParentProps, Switch } from 'solid-js'
-import { Color, Texture, TextureLoader } from 'three'
+import { Color, Texture, TextureLoader, Vector3 } from 'three'
 import styles from './meow.module.css'
 
 export function Labelled(props: ParentProps<{ label: string }>) {
@@ -66,36 +66,69 @@ export function Select<const T extends string[]>(props: {
   )
 }
 
-export function ColorInput(props: { color?: Color; onInput: (color: Color) => void }) {
+export function Vector3Input(props: { value: Vector3; onInput: (vector: Vector3) => void }) {
+  return (
+    <div class={styles.vector3Input}>
+      <NumberInput
+        step={0.1}
+        value={props.value.x}
+        onInput={value => {
+          props.value.x = value
+          props.onInput(props.value)
+        }}
+      />
+      <NumberInput
+        step={0.1}
+        value={props.value.y}
+        onInput={value => {
+          props.value.y = value
+          props.onInput(props.value)
+        }}
+      />
+      <NumberInput
+        step={0.1}
+        value={props.value.z}
+        onInput={value => {
+          props.value.z = value
+          props.onInput(props.value)
+        }}
+      />
+    </div>
+  )
+}
+
+export function ColorInput(props: { value: Color; onInput: (color: Color) => void }) {
   return (
     <div
       class={styles.colorInput}
       style={{
-        'background-color':
-          props.color instanceof Color
-            ? `rgb(${props.color.r * 250},${props.color.g * 250},${props.color.b * 250})`
-            : 'white',
+        'background-color': `rgb(${props.value.r * 250},${props.value.g * 250},${
+          props.value.b * 250
+        })`,
       }}
     >
       <NumberInput
         step={0.1}
-        value={props.color?.r || 0}
+        value={props.value.r}
         onInput={value => {
-          props.onInput(new Color(value, props.color?.g || 0, props.color?.b || 0))
+          props.value.r = value
+          props.onInput(props.value)
         }}
       />
       <NumberInput
         step={0.1}
-        value={props.color?.g || 0}
+        value={props.value.g}
         onInput={value => {
-          props.onInput(new Color(props.color?.r || 0, value, props.color?.b || 0))
+          props.value.g = value
+          props.onInput(props.value)
         }}
       />
       <NumberInput
         step={0.1}
-        value={props.color?.b || 0}
+        value={props.value.b}
         onInput={value => {
-          props.onInput(new Color(props.color?.r || 0, props.color?.g || 0, value))
+          props.value.b = value
+          props.onInput(props.value)
         }}
       />
     </div>
