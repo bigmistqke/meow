@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite'
-import solidPlugin from 'vite-plugin-solid'
+import mkcert from 'vite-plugin-mkcert'
+import solid from 'vite-plugin-solid'
 
 export default defineConfig({
   base: './',
-  plugins: [solidPlugin()],
+  plugins: [solid(), mkcert()],
   server: {
     port: 3000,
   },

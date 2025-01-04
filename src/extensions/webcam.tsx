@@ -1,6 +1,6 @@
 import { DrawingUtils, FaceLandmarker, FaceLandmarkerResult } from '@mediapipe/tasks-vision'
 import { createEffect, createSignal } from 'solid-js'
-import { Labelled, List } from '../components'
+import { Button, Labelled, List, NumberInput } from '../components'
 import { Extension } from '../types'
 
 function drawLandmarks(faceLandmarkerResult: FaceLandmarkerResult, drawingUtils: DrawingUtils) {
@@ -52,7 +52,7 @@ export default (): Extension => {
   const drawingUtils = new DrawingUtils(ctx)
 
   return {
-    name: 'webcam-debugger',
+    name: 'Webcam Debugger',
     async setup(state) {
       createEffect(() => {
         if (!state.stream) return
@@ -101,19 +101,15 @@ export default (): Extension => {
       return (
         <List>
           <Labelled label="width">
-            <input type="number" value={width()} onInput={e => setWidth(+e.currentTarget.value)} />
+            <NumberInput value={width()} onInput={value => setWidth(value)} />
           </Labelled>
           <Labelled label="margin">
-            <input
-              type="number"
-              value={margin()}
-              onInput={e => setMargin(+e.currentTarget.value)}
-            />
+            <NumberInput value={margin()} onInput={value => setMargin(value)} />
           </Labelled>
           <Labelled label="visible">
-            <button onClick={() => setVisible(visible => !visible)}>
+            <Button onClick={() => setVisible(visible => !visible)}>
               {!visible() ? 'hidden' : 'visible'}
-            </button>
+            </Button>
           </Labelled>
         </List>
       )

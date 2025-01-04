@@ -83,9 +83,12 @@
     "pnpm": ">=9.0.0"
   },
   "dependencies": {
+    "@bigmistqke/solid-grid-split": "^0.0.2",
     "@mediapipe/tasks-vision": "^0.10.18",
+    "clsx": "^2.1.1",
     "solid-js": "^1.6.0",
     "three": "^0.172.0",
-    "three-stdlib": "^2.35.2"
+    "three-stdlib": "^2.35.2",
+    "vite-plugin-mkcert": "^1.17.6"
   }
 }

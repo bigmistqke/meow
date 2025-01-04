@@ -1,4 +1,5 @@
-import { For, Match, onMount, ParentProps, Switch } from 'solid-js'
+import clsx from 'clsx'
+import { For, JSX, Match, onMount, ParentProps, Switch } from 'solid-js'
 import { Color, Texture, TextureLoader } from 'three'
 import styles from './meow.module.css'
 
@@ -11,8 +12,18 @@ export function Labelled(props: ParentProps<{ label: string }>) {
   )
 }
 
-export function Block(props: ParentProps) {
-  return <div class={styles.block}>{props.children}</div>
+export function Button(
+  props: ParentProps<{
+    class?: string
+    style?: JSX.CSSProperties
+    onClick: (event: MouseEvent) => void
+  }>,
+) {
+  return (
+    <button style={props.style} class={clsx(styles.button, props.class)} onClick={props.onClick}>
+      {props.children}
+    </button>
+  )
 }
 
 export function List(props: ParentProps) {
@@ -30,7 +41,7 @@ export function NumberInput(props: {
 }) {
   return (
     <input
-      style={{ width: '100%', 'box-sizing': 'border-box' }}
+      class={styles.numberInput}
       type="number"
       value={props.value}
       onInput={event => props.onInput(+event.currentTarget.value)}
@@ -39,13 +50,17 @@ export function NumberInput(props: {
   )
 }
 
-export function SelectInput<const T extends string[]>(props: {
+export function Select<const T extends string[]>(props: {
   options: T
   onInput: (option: T[number]) => void
   value: string
 }) {
   return (
-    <select value={props.value} onInput={event => props.onInput(event.currentTarget.value)}>
+    <select
+      class={styles.select}
+      value={props.value}
+      onInput={event => props.onInput(event.currentTarget.value)}
+    >
       <For each={props.options}>{option => <option value={option}>{option}</option>}</For>
     </select>
   )
@@ -87,13 +102,10 @@ export function ColorInput(props: { color?: Color; onInput: (color: Color) => vo
   )
 }
 
-function CanvasFromBitmap(props: { bitmap: ImageBitmap }) {
+function CanvasFromBitmap(props: { bitmap: ImageBitmap; class?: string }) {
   return (
     <canvas
-      style={{
-        width: '100%',
-        height: '100%',
-      }}
+      class={props.class}
       ref={element => {
         onMount(() => {
           element.width = props.bitmap.width
@@ -129,7 +141,7 @@ export function TextureInput(props: { texture?: Texture; onInput: (texture: Text
           }
         }}
       />
-      <button onClick={() => input!.click()}>
+      <Button onClick={() => input!.click()} class={styles.textureInput}>
         <Switch>
           <Match
             when={
@@ -152,7 +164,7 @@ export function TextureInput(props: { texture?: Texture; onInput: (texture: Text
             {data => <CanvasFromBitmap bitmap={data()} />}
           </Match>
         </Switch>
-      </button>
+      </Button>
     </>
   )
 }

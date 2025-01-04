@@ -1,7 +1,7 @@
 import { createEffect, createMemo, createSignal, For, mapArray } from 'solid-js'
 import * as THREE from 'three'
 import { Mesh } from 'three'
-import { ColorInput, H3, Labelled, List, SelectInput, TextureInput } from '../components'
+import { ColorInput, H3, Labelled, List, Select, TextureInput } from '../components'
 import { Extension } from '../types'
 import { traverse } from '../utils/traverse'
 
@@ -48,7 +48,7 @@ export default (): Extension => {
   })
 
   return {
-    name: 'materials',
+    name: 'Material',
     async setup(state) {
       createEffect(() => {
         if (state.gltf) {
@@ -72,7 +72,7 @@ export default (): Extension => {
               <H3>{mesh.name}</H3>
               <List>
                 <Labelled label="type">
-                  <SelectInput
+                  <Select
                     value={type()}
                     options={['MeshPhongMaterial', 'MeshStandardMaterial', 'MeshBasicMaterial']}
                     onInput={setType}
