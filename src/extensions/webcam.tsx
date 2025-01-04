@@ -52,7 +52,7 @@ export default (): Extension => {
   const drawingUtils = new DrawingUtils(ctx)
 
   return {
-    name: 'webcam-debugger',
+    name: 'Webcam Debugger',
     async setup(state) {
       createEffect(() => {
         if (!state.stream) return

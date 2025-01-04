@@ -1,3 +1,4 @@
+import { Split } from '@bigmistqke/solid-grid-split'
 import { FaceLandmarker, FaceLandmarkerResult, FilesetResolver } from '@mediapipe/tasks-vision'
 import {
   createEffect,
@@ -14,6 +15,7 @@ import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import * as THREE from 'three'
 import { GLTF, GLTFLoader, OrbitControls } from 'three-stdlib'
 import avatar from './assets/avatar.glb?url'
+import { Button } from './components'
 import material from './extensions/material'
 import webcam from './extensions/webcam'
 import styles from './meow.module.css'
@@ -123,6 +125,33 @@ function createThreeManager() {
   }
 }
 
+function ExtensionComponent(props: { extension: Extension; delete: () => void; state: MeowState }) {
+  const [visible, setVisible] = createSignal(true)
+  return (
+    <>
+      <section class={styles.section}>
+        <header class={styles.sectionHeader}>
+          <h2>{props.extension.name}</h2>
+          <Button onClick={() => setVisible(visible => !visible)}>
+            {visible() ? 'min' : 'max'}
+          </Button>
+          <Button
+            style={{
+              'aspect-ratio': 1,
+            }}
+            onClick={props.delete}
+          >
+            x
+          </Button>
+        </header>
+        <Show when={visible()}>
+          <div>{props.extension.widget?.(props.state)}</div>
+        </Show>
+      </section>
+    </>
+  )
+}
+
 function EditorPane(props: {
   enabled: boolean
   setEnabled: Setter<boolean>
@@ -149,70 +178,54 @@ function EditorPane(props: {
   return (
     <>
       <div
-        style={{
-          overflow: 'hidden',
-          'border-left': '1px solid black',
-          display: 'grid',
-          'grid-template-rows': 'auto 1fr',
-          'align-items': 'start',
-        }}
+        style={{ display: 'grid', 'grid-template-columns': '1fr 1fr', gap: '5px', padding: '5px' }}
       >
-        <div style={{ display: 'grid', 'grid-template-columns': '1fr 1fr' }}>
-          <button onClick={() => props.setEnabled(enabled => !enabled)}>
-            {props.enabled ? 'disable' : 'enable'} cam
-          </button>
-          <button
-            onClick={() => {
-              fileInput!.click()
-            }}
-          >
-            upload model
-          </button>
-          <input hidden type="file" ref={fileInput!} onInput={handleLoadLocalModel} />
-        </div>
-        <div style={{ display: 'grid', height: '100%', overflow: 'auto', 'align-items': 'start' }}>
-          <For each={props.extensions}>
-            {(extension, index) => (
-              <section class={styles.section}>
-                <header class={styles.sectionHeader}>
-                  <h2>{extension.name}</h2>
-                  <button
-                    onClick={() =>
-                      props.setExtensions(produce(extensions => extensions.splice(index(), 1)))
-                    }
-                  >
-                    x
-                  </button>
-                </header>
-                <div>{extension.widget?.(props.state)}</div>
-              </section>
-            )}
-          </For>
-          <button onClick={() => setAddOpened(bool => !bool)}>
-            {!addOpened() ? 'add' : 'close'}
-          </button>
-          <div style={{ padding: '5px', display: 'grid', gap: '5px' }}>
-            <Show when={addOpened()}>
-              <For each={Object.entries(BUILTINS)}>
-                {([name, extension]) => (
-                  <button
-                    onClick={() => {
-                      props.setExtensions(
-                        produce(extensions =>
-                          extensions.push(
-                            typeof extension === 'function' ? extension() : extension,
-                          ),
-                        ),
-                      )
-                      setAddOpened(false)
-                    }}
-                  >
-                    {name}
-                  </button>
-                )}
-              </For>
-            </Show>
-          </div>
+        <Button onClick={() => props.setEnabled(enabled => !enabled)}>
+          {props.enabled ? 'disable' : 'enable'} cam
+        </Button>
+        <Button
+          onClick={() => {
+            fileInput!.click()
+          }}
+        >
+          upload model
+        </Button>
+        <input hidden type="file" ref={fileInput!} onInput={handleLoadLocalModel} />
+      </div>
+      <div class={styles.extensions}>
+        <For each={props.extensions}>
+          {(extension, index) => (
+            <ExtensionComponent
+              extension={extension}
+              state={props.state}
+              delete={() =>
+                props.setExtensions(produce(extensions => extensions.splice(index(), 1)))
+              }
+            />
+          )}
+        </For>
+        <Button onClick={() => setAddOpened(bool => !bool)}>
+          {!addOpened() ? 'add' : 'close'}
+        </Button>
+        <div style={{ padding: '5px', display: 'grid', gap: '5px' }}>
+          <Show when={addOpened()}>
+            <For each={Object.entries(BUILTINS)}>
+              {([name, extension]) => (
+                <Button
+                  onClick={() => {
+                    props.setExtensions(
+                      produce(extensions =>
+                        extensions.push(typeof extension === 'function' ? extension() : extension),
+                      ),
+                    )
+                    setAddOpened(false)
+                  }}
+                >
+                  {name}
+                </Button>
+              )}
+            </For>
+          </Show>
         </div>
       </div>
     </>
@@ -314,15 +327,14 @@ const App: Component = () => {
   onMount(() => threeManager.loadFromUrl(avatar))
 
   return (
-    <div
+    <Split
       style={{
-        display: 'grid',
-        'grid-template-columns': '1fr 300px',
         height: '100vh',
         overflow: 'hidden',
       }}
     >
-      <div
+      <Split.Pane
+        size="1fr"
         style={{ position: 'relative', overflow: 'hidden' }}
         ref={element => {
           onMount(() => {
@@ -338,16 +350,28 @@ const App: Component = () => {
         </div>
         {video}
         {threeManager.canvas}
-      </div>
-      <EditorPane
-        enabled={enabled()}
-        extensions={extensions}
-        setEnabled={setEnabled}
-        setExtensions={setExtensions}
-        state={state}
-        threeManager={threeManager}
-      />
-    </div>
+      </Split.Pane>
+      <Split.Handle size="5px" class={styles.handle} />
+      <Split.Pane
+        size="350px"
+        style={{
+          overflow: 'hidden',
+          display: 'grid',
+          'grid-template-rows': 'auto 1fr',
+          'align-items': 'start',
+          background: 'var(--color-editor-bg)',
+        }}
+      >
+        <EditorPane
+          enabled={enabled()}
+          extensions={extensions}
+          setEnabled={setEnabled}
+          setExtensions={setExtensions}
+          state={state}
+          threeManager={threeManager}
+        />
+      </Split.Pane>
+    </Split>
   )
 }
 
