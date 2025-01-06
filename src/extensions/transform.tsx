@@ -1,5 +1,5 @@
-import { Labelled, List, Vector3Input } from '../components'
-import { Extension } from '../types'
+import { Labelled, List, Vector3Input } from 'src/components'
+import { Extension } from 'src/types'
 
 export default (): Extension => {
   return {

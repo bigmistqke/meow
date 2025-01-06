@@ -91,6 +91,7 @@
     "stats.js": "^0.17.0",
     "three": "^0.172.0",
     "three-stdlib": "^2.35.2",
-    "vite-plugin-mkcert": "^1.17.6"
+    "vite-plugin-mkcert": "^1.17.6",
+    "vite-tsconfig-paths": "^5.1.4"
   }
 }

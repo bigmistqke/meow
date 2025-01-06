@@ -1,10 +1,10 @@
 import { createEffect, createSignal, For } from 'solid-js'
+import { ColorInput, H3, Labelled, List, Select, TextureInput } from 'src/components'
+import { Extension } from 'src/types'
+import { createWritable } from 'src/utils/create-writable'
+import { traverse } from 'src/utils/traverse'
 import * as THREE from 'three'
 import { Mesh } from 'three'
-import { ColorInput, H3, Labelled, List, Select, TextureInput } from '../components'
-import { Extension } from '../types'
-import { createWritable } from '../utils/create-writable'
-import { traverse } from '../utils/traverse'
 
 export default (): Extension => {
   const [meshes, setMeshes] = createSignal<Array<THREE.Object3D>>()

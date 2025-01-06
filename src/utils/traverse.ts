@@ -16,8 +16,6 @@ traverse.map = <T>(root: Object3D, callback: (object: Object3D) => T): Array<T> 
 
 traverse.filter = (root: Object3D, callback: (object: Object3D) => boolean): Array<Object3D> => {
   const array = new Array<Object3D>()
-  traverse(root, node => {
-    if (callback(node)) array.push(node)
-  })
+  traverse(root, node => callback(node) && array.push(node))
   return array
 }

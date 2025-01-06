@@ -1,7 +1,7 @@
 import { DrawingUtils, FaceLandmarker, FaceLandmarkerResult } from '@mediapipe/tasks-vision'
 import { createEffect, createSignal } from 'solid-js'
-import { Button, Labelled, List, NumberInput } from '../components'
-import { Extension } from '../types'
+import { Button, Labelled, List, NumberInput } from 'src/components'
+import { Extension } from 'src/types'
 
 function drawLandmarks(faceLandmarkerResult: FaceLandmarkerResult, drawingUtils: DrawingUtils) {
   for (const landmarks of faceLandmarkerResult.faceLandmarks) {
