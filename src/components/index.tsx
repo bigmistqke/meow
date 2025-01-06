@@ -1,8 +1,14 @@
 import clsx from 'clsx'
 import { For, JSX, Match, onMount, ParentProps, Switch } from 'solid-js'
 import { Color, Euler, Texture, TextureLoader, Vector3 } from 'three'
-import styles from './meow.module.css'
-import { bypass } from './utils/intercept-property'
+import { bypass } from '../utils/intercept-property'
+import styles from './meow-components.module.css'
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                     Layout                                     */
+/*                                                                                */
+/**********************************************************************************/
 
 export function Labelled(props: ParentProps<{ label: string }>) {
   return (
@@ -12,6 +18,20 @@ export function Labelled(props: ParentProps<{ label: string }>) {
     </div>
   )
 }
+
+export function List(props: ParentProps) {
+  return <div class={styles.list}>{props.children}</div>
+}
+
+export function H3(props: ParentProps) {
+  return <h3 class={styles.h3}>{props.children}</h3>
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                   Interactive                                  */
+/*                                                                                */
+/**********************************************************************************/
 
 export function Button(
   props: ParentProps<{
@@ -27,12 +47,24 @@ export function Button(
   )
 }
 
-export function List(props: ParentProps) {
-  return <div class={styles.list}>{props.children}</div>
-}
-
-export function H3(props: ParentProps) {
-  return <h3 class={styles.h3}>{props.children}</h3>
+export function HoverButton(
+  props: ParentProps<{
+    class?: string
+    style?: JSX.CSSProperties
+    onClick: (event: MouseEvent) => void
+    hoverElement: JSX.Element
+  }>,
+) {
+  return (
+    <button
+      style={props.style}
+      class={clsx(styles.hoverButton, props.class)}
+      onClick={props.onClick}
+    >
+      <span>{props.children}</span>
+      <span>{props.hoverElement}</span>
+    </button>
+  )
 }
 
 export function NumberInput(props: {

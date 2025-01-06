@@ -1,11 +1,14 @@
 import { Split } from '@bigmistqke/solid-grid-split'
 import { FaceLandmarker, FaceLandmarkerResult, FilesetResolver } from '@mediapipe/tasks-vision'
+import clsx from 'clsx'
 import {
   createEffect,
   createResource,
+  createSelector,
   createSignal,
   For,
   mapArray,
+  on,
   onMount,
   Setter,
   Show,
@@ -16,7 +19,7 @@ import Stats from 'stats.js'
 import * as THREE from 'three'
 import { GLTF, GLTFLoader, OrbitControls } from 'three-stdlib'
 import avatar from './assets/avatar.glb?url'
-import { Button } from './components'
+import { Button, HoverButton } from './components'
 import material from './extensions/material'
 import transform from './extensions/transform'
 import webcam from './extensions/webcam'
@@ -29,7 +32,7 @@ const BUILTINS = { webcam, material }
 
 interceptProperty(THREE.Object3D, 'children', true)
 // Material needs to be a proxy because material can be `Material | Material[]`
-interceptProperty(THREE.Object3D, 'material', true)
+interceptProperty(THREE.Object3D, 'material' /* , true */)
 interceptProperty(THREE.Object3D, 'geometry')
 interceptProperty(THREE.Color, 'r')
 interceptProperty(THREE.Color, 'g')
@@ -72,17 +75,18 @@ function createThreeManager() {
   spot.lookAt(new THREE.Vector3())
   scene.add(spot)
 
-  createEffect(() => {
-    const _gltf = gltf()
-    if (_gltf) {
-      scene.add(_gltf.scene)
-      traverse(_gltf.scene, object => {
+  createEffect(
+    on(gltf, gltf => {
+      if (!gltf) return
+      gltf.scene.name = 'Avatar'
+      scene.add(gltf.scene)
+      traverse(gltf.scene, object => {
         if (object instanceof THREE.Mesh) {
           object.material.depthWrite = true
         }
       })
-    }
-  })
+    }),
+  )
 
   return {
     gltf,
@@ -111,24 +115,26 @@ function createThreeManager() {
       renderer.render(scene, camera)
     },
     updatePrediction({ facialTransformationMatrixes, faceBlendshapes }: FaceLandmarkerResult) {
-      const _gltf = gltf()
-      if (!_gltf) return
+      bypass(() => {
+        const _gltf = gltf()
+        if (!_gltf) return
 
-      const matrix = facialTransformationMatrixes[0]?.data as THREE.Matrix4Tuple
-      if (matrix) {
-        _gltf.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
-      }
-      faceBlendshapes[0]?.categories.forEach(category => {
-        const name = category.displayName || category.categoryName
-        traverse(_gltf.scene, face => {
-          if (
-            face instanceof THREE.Mesh &&
-            face.morphTargetDictionary &&
-            face.morphTargetInfluences
-          ) {
-            const index = face.morphTargetDictionary[name] as number
-            face.morphTargetInfluences[index] = category.score
-          }
+        const matrix = facialTransformationMatrixes[0]?.data as THREE.Matrix4Tuple
+        if (matrix) {
+          _gltf.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
+        }
+        faceBlendshapes[0]?.categories.forEach(category => {
+          const name = category.displayName || category.categoryName
+          traverse(_gltf.scene, face => {
+            if (
+              face instanceof THREE.Mesh &&
+              face.morphTargetDictionary &&
+              face.morphTargetInfluences
+            ) {
+              const index = face.morphTargetDictionary[name] as number
+              face.morphTargetInfluences[index] = category.score
+            }
+          })
         })
       })
     },
@@ -162,6 +168,51 @@ function ExtensionComponent(props: { extension: Extension; delete: () => void; s
   )
 }
 
+function SceneGraph(props: {
+  state: MeowState
+  onSelect(node: THREE.Object3D): void
+  isNodeSelected: (node: THREE.Object3D) => boolean
+}) {
+  function Node(nodeProps: { node: THREE.Object3D; layer: number }) {
+    const [visible, setVisible] = createSignal(true)
+    const button = (
+      <button
+        class={clsx(styles.node, props.isNodeSelected(nodeProps.node) && styles.selected)}
+        style={{ 'padding-left': `${nodeProps.layer * 10}px` }}
+        onClick={() => props.onSelect(nodeProps.node)}
+      >
+        {nodeProps.node.name || nodeProps.node.type}
+      </button>
+    )
+    return (
+      <>
+        <Show when={nodeProps.node.children.length > 0} fallback={button}>
+          <div class={clsx(styles.row, props.isNodeSelected(nodeProps.node) && styles.selected)}>
+            {button}
+            <HoverButton
+              hoverElement={visible() ? '+' : '-'}
+              class={styles.collapse}
+              onClick={() => setVisible(visible => !visible)}
+            >
+              {visible() ? '-' : '+'}
+            </HoverButton>
+          </div>
+        </Show>
+        <Show when={visible()}>
+          <For each={'children' in nodeProps.node && nodeProps.node.children}>
+            {node => <Node node={node} layer={nodeProps.layer + 1} />}
+          </For>
+        </Show>
+      </>
+    )
+  }
+  return (
+    <Split.Pane size="250px" min="450px" max="50px" class={styles.sceneGraph}>
+      <Node node={props.state.scene} layer={1} />
+    </Split.Pane>
+  )
+}
+
 function EditorPane(props: {
   enabled: boolean
   setEnabled: Setter<boolean>
@@ -187,17 +238,7 @@ function EditorPane(props: {
   }
 
   return (
-    <Split.Pane
-      size="350px"
-      min="750px"
-      style={{
-        overflow: 'hidden',
-        display: 'grid',
-        'grid-template-rows': 'auto 1fr',
-        'align-items': 'start',
-        background: 'var(--color-editor-bg)',
-      }}
-    >
+    <Split.Pane size="350px" min="750px" class={styles.editorPane}>
       <div
         style={{
           display: 'grid',
@@ -217,7 +258,7 @@ function EditorPane(props: {
           upload model
         </Button>
         <input hidden type="file" ref={fileInput!} onInput={handleLoadLocalModel} />
-        <Button onClick={props.onCloseMenu}>min</Button>
+        <Button onClick={props.onCloseMenu}>cinema</Button>
       </div>
       <div class={styles.extensions}>
         <For each={props.extensions}>
@@ -263,6 +304,7 @@ const App: Component = () => {
   const threeManager = createThreeManager()
   const video = (<video hidden />) as HTMLVideoElement
 
+  const [selectedNode, setSelectedNode] = createSignal(threeManager.scene)
   const [visible, setVisible] = createSignal(true)
   const [prediction, setPrediction] = createSignal<FaceLandmarkerResult | undefined>()
   const [stream, setStream] = createSignal<MediaStream | undefined>()
@@ -301,6 +343,11 @@ const App: Component = () => {
       return stream()
     },
   }
+
+  const isNodeSelected = createSelector(
+    selectedNode,
+    (node: THREE.Object3D, selectedNode) => node === selectedNode,
+  )
 
   /* Predict */
   let _lastVideoTime = -1
@@ -376,7 +423,7 @@ const App: Component = () => {
           }}
           onClick={() => setVisible(true)}
         >
-          menu
+          editor
         </Button>
       </Show>
       <Split
@@ -385,9 +432,13 @@ const App: Component = () => {
           overflow: 'hidden',
         }}
       >
+        <Show when={visible()}>
+          <SceneGraph state={state} onSelect={setSelectedNode} isNodeSelected={isNodeSelected} />
+          <Split.Handle size="5px" class={styles.handle} />
+        </Show>
         <Split.Pane
           size="1fr"
-          style={{ position: 'relative', overflow: 'hidden' }}
+          style={{ position: 'relative', overflow: 'hidden', translate: '0px 0px 0px' }}
           ref={element => {
             onMount(() => {
               const observer = new ResizeObserver(() => {
@@ -400,7 +451,7 @@ const App: Component = () => {
           <div style={{ position: 'absolute', 'pointer-events': 'none' }}>
             <For each={extensions}>{extension => extension.overlay?.(state)}</For>
           </div>
-          {threeManager.stats}
+          <Show when={visible()}>{threeManager.stats}</Show>
           {video}
           {threeManager.canvas}
         </Split.Pane>

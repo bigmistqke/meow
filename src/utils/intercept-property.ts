@@ -1,6 +1,6 @@
 import { type Accessor, batch, createSignal, getListener, type Setter } from 'solid-js'
 
-type Trigger<T> = { listen: Accessor<T>; trigger: Setter<T> }
+type MeowSignal<T> = { listen: Accessor<T>; trigger: Setter<T> }
 function trigger<T>(initialValue: T | void) {
   const [listen, trigger] = createSignal(initialValue, { equals: false })
   return { listen, trigger }
@@ -9,32 +9,31 @@ function trigger<T>(initialValue: T | void) {
 const $LENGTH = Symbol()
 const $RAW = Symbol()
 const PROXIES = new WeakMap()
-const INTERCEPT_MAP = new WeakMap<any, Set<string>>()
-let INTERCEPT = true
 
+let UNPROXY = false
 export function bypass<T>(cb: () => T): T {
-  let before = INTERCEPT
-  INTERCEPT = false
+  let before = UNPROXY
+  UNPROXY = true
   const result = cb()
-  INTERCEPT = before
+  UNPROXY = before
   return result
 }
 export function intercept<T>(cb: () => T): T {
-  let before = INTERCEPT
-  INTERCEPT = true
+  let before = UNPROXY
+  UNPROXY = false
   const result = cb()
-  INTERCEPT = before
+  UNPROXY = before
   return result
 }
 
-export function unwrap<T>(value: T): T {
+export function raw<T>(value: T): T {
   return typeof value === 'object' && value !== null ? value[$RAW] ?? value : value
 }
 
 export function createProxy<T extends object>(node: T): T {
   if (PROXIES.has(node)) return PROXIES.get(node)
 
-  const properties = new Map<string | symbol | object, Trigger<void>>()
+  const properties = new Map<string | symbol | object, MeowSignal<void>>()
 
   const proxy = new Proxy(node, {
     get(target, property) {
@@ -44,9 +43,9 @@ export function createProxy<T extends object>(node: T): T {
 
       const value = target[property]
 
-      if (INTERCEPT) {
+      /* if (UNPROXY) {
         return value
-      }
+      } */
 
       if (!properties.has(property)) {
         properties.set(property, trigger())
@@ -66,7 +65,7 @@ export function createProxy<T extends object>(node: T): T {
         return true
       }
 
-      if (INTERCEPT) {
+      if (UNPROXY) {
         target[property] = value
         return true
       }
@@ -90,33 +89,31 @@ export function createProxy<T extends object>(node: T): T {
   return proxy
 }
 
-const hasIntercepted = (ThreeClass: any, propName: string) => {
-  if (INTERCEPT_MAP.get(ThreeClass)?.has(propName)) {
+const map = new WeakMap<any, Set<string>>()
+
+const hasSolidified = (ThreeClass: any, propName: string) => {
+  if (map.get(ThreeClass)?.has(propName)) {
     return true
   }
-  if (!INTERCEPT_MAP.has(ThreeClass)) {
-    INTERCEPT_MAP.set(ThreeClass, new Set())
+  if (!map.has(ThreeClass)) {
+    map.set(ThreeClass, new Set())
   }
-  INTERCEPT_MAP.get(ThreeClass)!.add(propName)
+  map.get(ThreeClass)!.add(propName)
   return false
 }
 
 // Generic function to make properties of Three.js classes reactive
-export function interceptProperty(
-  Class: new (...args: any) => any,
-  propName: string,
-  proxy = false,
-) {
-  if (hasIntercepted(Class, propName)) return
+export function interceptProperty(ThreeClass: any, propName: string, proxy = false) {
+  if (hasSolidified(ThreeClass, propName)) return
 
   const symbol = Symbol(`${propName}-solid`)
   const tempSymbol = Symbol(`${propName}-temp`)
-  const setter = Object.getOwnPropertyDescriptor(Class.prototype, propName)?.set
+  const setter = Object.getOwnPropertyDescriptor(ThreeClass.prototype, propName)?.set
 
-  Object.defineProperty(Class.prototype, propName, {
+  Object.defineProperty(ThreeClass.prototype, propName, {
     get() {
       const tempValue = this[tempSymbol]
-      if (!INTERCEPT) {
+      if (UNPROXY) {
         return this[tempSymbol]
       }
       if (!getListener()) {
@@ -129,12 +126,8 @@ export function interceptProperty(
       return proxy ? createProxy(tempValue) : tempValue
     },
     set(value) {
-      this[tempSymbol] = unwrap(value)
-      if (!INTERCEPT) {
-        setter?.(value)
-        return
-      }
-      if (this[symbol]) {
+      this[tempSymbol] = raw(value)
+      if (!UNPROXY && this[symbol]) {
         this[symbol].trigger(value)
       }
       setter?.(value)
