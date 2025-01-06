@@ -53,7 +53,8 @@ function createThreeManager() {
   const stats = new Stats()
 
   renderer.setSize(window.innerWidth, window.innerHeight)
-  camera.position.z = 1
+  camera.position.z = -1
+  camera.lookAt(new THREE.Vector3())
 
   const ambient = new THREE.AmbientLight()
   ambient.color = new THREE.Color('white')
@@ -256,27 +257,19 @@ function EditorPane(props: {
 }
 
 const App: Component = () => {
-  const [visible, setVisible] = createSignal(true)
   const threeManager = createThreeManager()
   const video = (<video hidden />) as HTMLVideoElement
 
-  const [state, setState] = createStore<MeowState>({
-    get gltf() {
-      return threeManager.gltf()
-    },
-    prediction: undefined,
-    scene: threeManager.scene,
-    stream: undefined,
-  })
-
-  const [enabled, setEnabled] = createSignal(true)
+  const [visible, setVisible] = createSignal(true)
+  const [prediction, setPrediction] = createSignal<FaceLandmarkerResult | undefined>()
+  const [stream, setStream] = createSignal<MediaStream | undefined>()
+  const [camEnabled, setCamEnabled] = createSignal(true)
   const [videoLoaded, setVideoLoaded] = createSignal(false)
   const [extensions, setExtensions] = createStore<Array<Extension>>([
     transform(),
     material(),
     webcam(),
   ])
-
   const [faceLandmarker] = createResource(async function createFaceLandmarker() {
     const filesetResolver = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm',
@@ -293,18 +286,31 @@ const App: Component = () => {
     })
   })
 
+  const state: MeowState = {
+    get gltf() {
+      return threeManager.gltf()
+    },
+    get prediction() {
+      return prediction()
+    },
+    scene: threeManager.scene,
+    get stream() {
+      return stream()
+    },
+  }
+
   /* Predict */
-  let lastVideoTime = -1
-  let prediction: undefined | FaceLandmarkerResult = undefined
+  let _lastVideoTime = -1
+  let _prediction: undefined | FaceLandmarkerResult = undefined
   function predict(timestamp: number) {
     const landmarker = faceLandmarker()
-    if (!landmarker || !enabled()) return
-    if (lastVideoTime !== video.currentTime || !prediction) {
-      prediction = landmarker.detectForVideo(video, timestamp)
-      lastVideoTime = video.currentTime
+    if (!landmarker || !camEnabled()) return
+    if (_lastVideoTime !== video.currentTime || !_prediction) {
+      _prediction = landmarker.detectForVideo(video, timestamp)
+      _lastVideoTime = video.currentTime
+      setPrediction(_prediction)
+      threeManager.updatePrediction(_prediction)
     }
-    setState({ prediction })
-    threeManager.updatePrediction(prediction)
   }
 
   /* Animation loop */
@@ -319,12 +325,12 @@ const App: Component = () => {
   threeManager.renderer.setAnimationLoop(animate)
 
   /* Enable the live webcam view and start detection. */
-  async function enableCam(faceLandmarker: FaceLandmarker) {
+  async function enableCam() {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: true,
     })
     video.srcObject = stream
-    setState({ stream })
+    setStream(stream)
     video.addEventListener('loadeddata', () => {
       video.play()
       setVideoLoaded(true)
@@ -332,15 +338,13 @@ const App: Component = () => {
   }
 
   createEffect(() => {
-    const landmarker = faceLandmarker()
-    if (!landmarker) return
-
+    if (!faceLandmarker()) return
     createEffect(() => {
-      if (enabled()) {
-        enableCam(landmarker)
+      if (camEnabled()) {
+        enableCam()
       } else {
         video.pause()
-        setState({ stream: undefined })
+        setStream()
       }
     })
   })
@@ -353,6 +357,7 @@ const App: Component = () => {
     ),
   )
 
+  /* Load default model */
   onMount(() => threeManager.loadFromUrl(avatar))
 
   return (
@@ -398,11 +403,10 @@ const App: Component = () => {
         </Split.Pane>
         <Show when={visible()}>
           <Split.Handle size="5px" class={styles.handle} />
-
           <EditorPane
-            enabled={enabled()}
+            enabled={camEnabled()}
             extensions={extensions}
-            setEnabled={setEnabled}
+            setEnabled={setCamEnabled}
             setExtensions={setExtensions}
             state={state}
             threeManager={threeManager}
