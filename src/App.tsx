@@ -28,6 +28,9 @@ import { traverse } from './utils/traverse'
 const BUILTINS = { webcam, material }
 
 interceptProperty(THREE.Object3D, 'children', true)
+// Material needs to be a proxy because material can be `Material | Material[]`
+interceptProperty(THREE.Object3D, 'material', true)
+interceptProperty(THREE.Object3D, 'geometry')
 interceptProperty(THREE.Color, 'r')
 interceptProperty(THREE.Color, 'g')
 interceptProperty(THREE.Color, 'b')

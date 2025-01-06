@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { Mesh } from 'three'
 import { ColorInput, H3, Labelled, List, Select, TextureInput } from '../components'
 import { Extension } from '../types'
+import { createWritable } from '../utils/create-writable'
 import { traverse } from '../utils/traverse'
 
 export default (): Extension => {
@@ -21,9 +22,9 @@ export default (): Extension => {
       return (
         <For each={meshes()}>
           {mesh => {
-            const [type, setType] = createSignal<
+            const [type, setType] = createWritable<
               'MeshBasicMaterial' | 'MeshPhongMaterial' | 'MeshStandardMaterial'
-            >(mesh.material.type)
+            >(() => mesh.material.type)
 
             createEffect(() => {
               if (type() !== mesh.material.type) {
