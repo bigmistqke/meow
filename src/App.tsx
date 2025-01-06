@@ -12,6 +12,7 @@ import {
   type Component,
 } from 'solid-js'
 import { createStore, produce, SetStoreFunction } from 'solid-js/store'
+import Stats from 'stats.js'
 import * as THREE from 'three'
 import { GLTF, GLTFLoader, OrbitControls } from 'three-stdlib'
 import avatar from './assets/avatar.glb?url'
@@ -21,9 +22,20 @@ import transform from './extensions/transform'
 import webcam from './extensions/webcam'
 import styles from './meow.module.css'
 import type { Extension, MeowState } from './types'
+import { bypass, interceptProperty } from './utils/intercept-property'
 import { traverse } from './utils/traverse'
 
 const BUILTINS = { webcam, material }
+
+interceptProperty(THREE.Object3D, 'children', true)
+interceptProperty(THREE.Color, 'r')
+interceptProperty(THREE.Color, 'g')
+interceptProperty(THREE.Color, 'b')
+interceptProperty(THREE.Material, 'color')
+interceptProperty(THREE.Material, 'map')
+interceptProperty(THREE.Vector3, 'x')
+interceptProperty(THREE.Vector3, 'y')
+interceptProperty(THREE.Vector3, 'z')
 
 function createThreeManager() {
   const [gltf, setGltf] = createSignal<GLTF>()
@@ -38,6 +50,7 @@ function createThreeManager() {
   const scene = new THREE.Scene()
   const loader = new GLTFLoader()
   const controls = new OrbitControls(camera, renderer.domElement)
+  const stats = new Stats()
 
   renderer.setSize(window.innerWidth, window.innerHeight)
   camera.position.z = 1
@@ -59,7 +72,6 @@ function createThreeManager() {
     const _gltf = gltf()
     if (_gltf) {
       scene.add(_gltf.scene)
-      // scene.rotateY(Math.PI)
       traverse(_gltf.scene, object => {
         if (object instanceof THREE.Mesh) {
           object.material.depthWrite = true
@@ -72,6 +84,7 @@ function createThreeManager() {
     gltf,
     canvas,
     scene,
+    stats: stats.dom,
     loadFromUrl(url: string) {
       loader.load(url, setGltf)
     },
@@ -79,8 +92,12 @@ function createThreeManager() {
       loader.parse(arrayBuffer, '', setGltf)
     },
     render: () => {
-      renderer.render(scene, camera)
-      controls.update()
+      bypass(() => {
+        stats.begin()
+        renderer.render(scene, camera)
+        controls.update()
+        stats.end()
+      })
     },
     renderer,
     resize(domRect: DOMRect) {
@@ -328,6 +345,7 @@ const App: Component = () => {
     })
   })
 
+  /* Setup all the extensions */
   createEffect(
     mapArray(
       () => extensions,
@@ -374,6 +392,7 @@ const App: Component = () => {
           <div style={{ position: 'absolute', 'pointer-events': 'none' }}>
             <For each={extensions}>{extension => extension.overlay?.(state)}</For>
           </div>
+          {threeManager.stats}
           {video}
           {threeManager.canvas}
         </Split.Pane>

@@ -20,6 +20,9 @@ importers:
       solid-js:
         specifier: ^1.6.0
         version: 1.8.17
+      stats.js:
+        specifier: ^0.17.0
+        version: 0.17.0
       three:
         specifier: ^0.172.0
         version: 0.172.0
@@ -33,6 +36,9 @@ importers:
       '@types/node':
         specifier: ^20.12.12
         version: 20.12.12
+      '@types/stats.js':
+        specifier: ^0.17.3
+        version: 0.17.3
       '@types/three':
         specifier: ^0.171.0
         version: 0.171.0
@@ -1989,6 +1995,9 @@ packages:
 
   stackback@0.0.2:
     resolution: {integrity: sha512-1XMJE5fQo1jGH6Y/7ebnwPOBEkIEnT4QF32d5R1+VXdXveM0IBMJt8zfaxX1P3QhVwrYe+576+jkANtSS2mBbw==}
+
+  stats.js@0.17.0:
+    resolution: {integrity: sha512-hNKz8phvYLPEcRkeG1rsGmV5ChMjKDAWU7/OJJdDErPBNChQXxCo3WZurGpnWc6gZhAzEPFad1aVgyOANH1sMw==}
 
   std-env@3.7.0:
     resolution: {integrity: sha512-JPbdCEQLj1w5GilpiHAx3qJvFndqybBysA3qUOnznweH4QbNYUsW/ea8QzSrnh0vNsezMMw5bcVool8lM0gwzg==}
@@ -4173,6 +4182,8 @@ snapshots:
   spawn-command@0.0.2: {}
 
   stackback@0.0.2: {}
+
+  stats.js@0.17.0: {}
 
   std-env@3.7.0: {}
 

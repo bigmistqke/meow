@@ -13,30 +13,22 @@ export default (): Extension => {
       const [type, setType] = createSignal<
         'MeshBasicMaterial' | 'MeshPhongMaterial' | 'MeshStandardMaterial'
       >(mesh.material.type)
-      const [color, setColor] = createSignal<THREE.Color>(mesh.material.color, { equals: false })
-      const [map, setMap] = createSignal<THREE.Texture>(mesh.material.map, { equals: false })
 
-      function update(type: string, value: any) {
-        mesh.material[type] = value
-        mesh.material.needsUpdate = true
-      }
-
-      createEffect(() => update('color', color()))
-      createEffect(() => update('map', map()))
       createEffect(() => {
         if (type() !== mesh.material.type) {
+          const color = mesh.material.color
+          const map = mesh.material.map
           mesh.material = new THREE[type()]()
-          update('color', color())
-          update('map', map())
+          mesh.material.color = color
+          mesh.material.map = map
         }
       })
 
       return {
-        mesh,
-        map,
-        color,
-        setColor,
-        setMap,
+        name: mesh.name,
+        get material() {
+          return mesh.material
+        },
         type,
         setType,
       }
@@ -63,9 +55,9 @@ export default (): Extension => {
     widget() {
       return (
         <For each={materials()}>
-          {({ mesh, setMap, map, setColor, color, type, setType }) => (
+          {({ name, material, type, setType }) => (
             <>
-              <H3>{mesh.name}</H3>
+              <H3>{name}</H3>
               <List>
                 <Labelled label="type">
                   <Select
@@ -75,10 +67,18 @@ export default (): Extension => {
                   />
                 </Labelled>
                 <Labelled label="color">
-                  <ColorInput value={color()} onInput={setColor} />
+                  <ColorInput
+                    value={material.color}
+                    onR={r => (material.color.r = r)}
+                    onG={g => (material.color.g = g)}
+                    onB={b => (material.color.b = b)}
+                  />
                 </Labelled>
                 <Labelled label="map">
-                  <TextureInput texture={map()} onInput={setMap} />
+                  <TextureInput
+                    texture={material.map}
+                    onInput={texture => (material.map = texture)}
+                  />
                 </Labelled>
               </List>
             </>

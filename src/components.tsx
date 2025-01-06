@@ -1,12 +1,13 @@
 import clsx from 'clsx'
 import { For, JSX, Match, onMount, ParentProps, Switch } from 'solid-js'
-import { Color, Texture, TextureLoader, Vector3 } from 'three'
+import { Color, Euler, Texture, TextureLoader, Vector3 } from 'three'
 import styles from './meow.module.css'
+import { bypass } from './utils/intercept-property'
 
 export function Labelled(props: ParentProps<{ label: string }>) {
   return (
     <div class={styles.labelled}>
-      <label>{props.label}</label>
+      <div>{props.label}</div>
       {props.children}
     </div>
   )
@@ -66,76 +67,49 @@ export function Select<const T extends string[]>(props: {
   )
 }
 
-export function Vector3Input(props: { value: Vector3; onInput: (vector: Vector3) => void }) {
+export function Vector3Input(props: {
+  value: Vector3 | Euler
+  onX: (value: number) => void
+  onY: (value: number) => void
+  onZ: (value: number) => void
+}) {
   return (
     <div class={styles.vector3Input}>
-      <NumberInput
-        step={0.1}
-        value={props.value.x}
-        onInput={value => {
-          props.value.x = value
-          props.onInput(props.value)
-        }}
-      />
-      <NumberInput
-        step={0.1}
-        value={props.value.y}
-        onInput={value => {
-          props.value.y = value
-          props.onInput(props.value)
-        }}
-      />
-      <NumberInput
-        step={0.1}
-        value={props.value.z}
-        onInput={value => {
-          props.value.z = value
-          props.onInput(props.value)
-        }}
-      />
+      <NumberInput step={0.1} value={props.value.x} onInput={props.onX} />
+      <NumberInput step={0.1} value={props.value.y} onInput={props.onY} />
+      <NumberInput step={0.1} value={props.value.z} onInput={props.onZ} />
     </div>
   )
 }
 
-export function ColorInput(props: { value: Color; onInput: (color: Color) => void }) {
+export function ColorInput(props: {
+  value: Color
+  onR: (value: number) => void
+  onG: (value: number) => void
+  onB: (value: number) => void
+}) {
+  const color = () => {
+    const { r, g, b } = props.value
+    const biggest = [r, g, b].sort()[2]!
+    const scale = Math.max(1, biggest)
+    return `rgb(${(r / scale) * 250},${(g / scale) * 250},${(b / scale) * 250})`
+  }
   return (
     <div
       class={styles.colorInput}
       style={{
-        'background-color': `rgb(${props.value.r * 250},${props.value.g * 250},${
-          props.value.b * 250
-        })`,
+        'background-color': color(),
       }}
     >
-      <NumberInput
-        step={0.1}
-        value={props.value.r}
-        onInput={value => {
-          props.value.r = value
-          props.onInput(props.value)
-        }}
-      />
-      <NumberInput
-        step={0.1}
-        value={props.value.g}
-        onInput={value => {
-          props.value.g = value
-          props.onInput(props.value)
-        }}
-      />
-      <NumberInput
-        step={0.1}
-        value={props.value.b}
-        onInput={value => {
-          props.value.b = value
-          props.onInput(props.value)
-        }}
-      />
+      <NumberInput step={0.1} value={props.value.r} onInput={props.onR} />
+      <NumberInput step={0.1} value={props.value.g} onInput={props.onG} />
+      <NumberInput step={0.1} value={props.value.b} onInput={props.onB} />
     </div>
   )
 }
 
 function CanvasFromBitmap(props: { bitmap: ImageBitmap; class?: string }) {
+  console.log('mount')
   return (
     <canvas
       class={props.class}
@@ -144,7 +118,12 @@ function CanvasFromBitmap(props: { bitmap: ImageBitmap; class?: string }) {
           element.width = props.bitmap.width
           element.height = props.bitmap.height
           const ctx = element.getContext('2d')!
-          ctx.drawImage(props.bitmap, 0, 0)
+
+          ctx.drawImage(
+            bypass(() => props.bitmap),
+            0,
+            0,
+          )
         })
       }}
     />
@@ -152,7 +131,10 @@ function CanvasFromBitmap(props: { bitmap: ImageBitmap; class?: string }) {
 }
 
 const loader = new TextureLoader()
-export function TextureInput(props: { texture?: Texture; onInput: (texture: Texture) => void }) {
+export function TextureInput(props: {
+  texture: Texture | null
+  onInput: (texture: Texture) => void
+}) {
   let input: HTMLInputElement
   return (
     <>

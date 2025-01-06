@@ -1,5 +1,3 @@
-import { createEffect, createSignal } from 'solid-js'
-import { Vector3 } from 'three'
 import { Labelled, List, Vector3Input } from '../components'
 import { Extension } from '../types'
 
@@ -7,28 +5,31 @@ export default (): Extension => {
   return {
     name: 'Transform',
     widget(state) {
-      const [position, setPosition] = createSignal(new Vector3(), { equals: false })
-      const [rotation, setRotation] = createSignal(new Vector3(0, Math.PI, 0), { equals: false })
-      const [scale, setScale] = createSignal(new Vector3(3, 3, 3), { equals: false })
-      createEffect(() => {
-        state.scene.scale.set(scale().x, scale().y, scale().z)
-      })
-      createEffect(() => {
-        state.scene.rotation.set(rotation().x, rotation().y, rotation().z)
-      })
-      createEffect(() => {
-        state.scene.position.set(position().x, position().y, position().z)
-      })
       return (
         <List>
           <Labelled label="position">
-            <Vector3Input value={position()} onInput={setPosition} />
+            <Vector3Input
+              value={state.scene.position}
+              onX={x => (state.scene.position.x = x)}
+              onY={y => (state.scene.position.y = y)}
+              onZ={z => (state.scene.position.z = z)}
+            />
           </Labelled>
           <Labelled label="rotation">
-            <Vector3Input value={rotation()} onInput={setRotation} />
+            <Vector3Input
+              value={state.scene.rotation}
+              onX={x => (state.scene.rotation.x = x)}
+              onY={y => (state.scene.rotation.y = y)}
+              onZ={z => (state.scene.rotation.z = z)}
+            />
           </Labelled>
           <Labelled label="scale">
-            <Vector3Input value={scale()} onInput={setScale} />
+            <Vector3Input
+              value={state.scene.scale}
+              onX={x => (state.scene.scale.x = x)}
+              onY={y => (state.scene.scale.y = y)}
+              onZ={z => (state.scene.scale.z = z)}
+            />
           </Labelled>
         </List>
       )
