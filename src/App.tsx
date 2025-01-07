@@ -10,6 +10,7 @@ import {
   For,
   mapArray,
   on,
+  onCleanup,
   onMount,
   Setter,
   Show,
@@ -30,6 +31,7 @@ import { traverse } from './utils/traverse'
 import { MaterialWidget, TransformWidget } from './widgets'
 
 const BUILTINS = { webcam, material }
+const $HIDDEN = Symbol('meow-hidden')
 
 interceptProperty(THREE.Object3D, 'children', true)
 // Material needs to be a proxy because material can be `Material | Material[]`
@@ -179,7 +181,7 @@ function SceneGraph(props: {
       </button>
     )
     return (
-      <>
+      <Show when={!($HIDDEN in nodeProps.node)}>
         <Show when={nodeProps.node.children.length > 0} fallback={button}>
           <div class={clsx(styles.row, props.isNodeSelected(nodeProps.node) && styles.selected)}>
             {button}
@@ -197,7 +199,7 @@ function SceneGraph(props: {
             {node => <Node node={node} layer={nodeProps.layer + 1} />}
           </For>
         </Show>
-      </>
+      </Show>
     )
   }
   return (
@@ -313,7 +315,7 @@ const App: Component = () => {
   const video = (<video hidden />) as HTMLVideoElement
 
   const [selectedNode, setSelectedNode] = createSignal(threeManager.scene)
-  const [visible, setVisible] = createSignal(true)
+  const [mode, setMode] = createSignal<'editor' | 'cinema'>('editor')
   const [prediction, setPrediction] = createSignal<FaceLandmarkerResult | undefined>()
   const [stream, setStream] = createSignal<MediaStream | undefined>()
   const [camEnabled, setCamEnabled] = createSignal(true)
@@ -430,11 +432,24 @@ const App: Component = () => {
           ),
         )
 
+        createEffect(() => {
+          if (mode() === 'cinema') return
+          bypass(() => {
+            const axesHelper = new THREE.AxesHelper(0.25)
+            axesHelper[$HIDDEN] = true
+            threeManager.scene.add(axesHelper)
+
+            createEffect(() => axesHelper.position.copy(selectedNode().position))
+            onCleanup(() => threeManager.scene.remove(axesHelper))
+          })
+        })
+
         /* Load default model */
         onMount(() => threeManager.loadFromUrl(avatar))
+
         return (
           <>
-            <Show when={!visible()}>
+            <Show when={mode() === 'cinema'}>
               <Button
                 style={{
                   position: 'absolute',
@@ -443,7 +458,7 @@ const App: Component = () => {
                   right: '0px',
                   margin: 'var(--gap)',
                 }}
-                onClick={() => setVisible(true)}
+                onClick={() => setMode('editor')}
               >
                 editor
               </Button>
@@ -454,7 +469,7 @@ const App: Component = () => {
                 overflow: 'hidden',
               }}
             >
-              <Show when={visible()}>
+              <Show when={mode() === 'editor'}>
                 <SceneGraph onSelect={setSelectedNode} isNodeSelected={isNodeSelected} />
                 <Split.Handle size="5px" class={styles.handle} />
               </Show>
@@ -475,11 +490,11 @@ const App: Component = () => {
                     {extension => extension.overlay?.(state)}
                   </For>
                 </div>
-                <Show when={visible()}>{threeManager.stats}</Show>
+                <Show when={mode() === 'editor'}>{threeManager.stats}</Show>
                 {video}
                 {threeManager.canvas}
               </Split.Pane>
-              <Show when={visible()}>
+              <Show when={mode() === 'editor'}>
                 <Split.Handle size="5px" class={styles.handle} />
                 <EditorPane
                   enabled={camEnabled()}
@@ -506,7 +521,7 @@ const App: Component = () => {
                   }}
                   setEnabled={setCamEnabled}
                   threeManager={threeManager}
-                  onCloseMenu={() => setVisible(false)}
+                  onCloseMenu={() => setMode('cinema')}
                 />
               </Show>
             </Split>
