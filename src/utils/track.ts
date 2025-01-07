@@ -8,10 +8,10 @@ interface TrackNode extends Pulse {
   equals?: (value: any) => boolean
 }
 
-const tracking = new Map<object, Map<string | number | symbol, TrackNode>>()
+const trackNodes = new Map<object, Map<string | number | symbol, TrackNode>>()
 
-export function trackTracked() {
-  tracking.entries().forEach(([object, map]) =>
+export function evaluateTrackNodes() {
+  trackNodes.entries().forEach(([object, map]) =>
     map.entries().forEach(([property, node]) => {
       const shouldEmit = !node.equals ? object[property] !== node.value : !node.equals(node.value)
       node.value = object[property]
@@ -54,10 +54,10 @@ export function track(
     return () => memo()()
   }
 
-  let map = tracking.get(target)
+  let map = trackNodes.get(target)
   if (!map) {
     map = new Map()
-    tracking.set(target, map)
+    trackNodes.set(target, map)
   }
   let node = map.get(property)
   if (node) {

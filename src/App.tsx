@@ -21,7 +21,7 @@ import {
 } from 'solid-js'
 import Stats from 'stats.js'
 import * as THREE from 'three'
-import { GLTF, GLTFLoader, OrbitControls } from 'three-stdlib'
+import { GLTF, GLTFLoader, OrbitControls, TransformControls } from 'three-stdlib'
 import avatar from './assets/avatar.glb?url'
 import { Button, HoverButton, Widget } from './components'
 import material from './extensions/material'
@@ -29,12 +29,11 @@ import webcam from './extensions/webcam'
 import styles from './meow.module.css'
 import type { Extension, MeowState } from './types'
 import { MeowProvider, useMeow } from './use-meow'
-import { track, trackTracked } from './utils/track'
+import { evaluateTrackNodes, track } from './utils/track'
 import { traverse } from './utils/traverse'
 import { MaterialWidget, TransformWidget } from './widgets'
 
 const BUILTINS = { webcam, material }
-const $HIDDEN = Symbol('meow-hidden')
 
 /**********************************************************************************/
 /*                                                                                */
@@ -54,7 +53,7 @@ function createThreeManager() {
   const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
   const scene = new THREE.Scene()
   const loader = new GLTFLoader()
-  const controls = new OrbitControls(camera, renderer.domElement)
+  const orbitControls = new OrbitControls(camera, renderer.domElement)
   const stats = new Stats()
 
   renderer.setSize(window.innerWidth, window.innerHeight)
@@ -88,10 +87,13 @@ function createThreeManager() {
   )
 
   return {
-    gltf,
+    camera,
     canvas,
+    gltf,
+    renderer,
     scene,
     stats: stats.dom,
+    orbitControls,
     loadFromUrl(url: string) {
       loader.load(url, setGltf)
     },
@@ -100,12 +102,11 @@ function createThreeManager() {
     },
     render: () => {
       stats.begin()
-      trackTracked()
+      evaluateTrackNodes()
       renderer.render(scene, camera)
-      controls.update()
+      orbitControls.update()
       stats.end()
     },
-    renderer,
     resize(domRect: DOMRect) {
       camera.aspect = domRect.width / domRect.height
       camera.updateProjectionMatrix()
@@ -143,6 +144,18 @@ function createThreeManager() {
 /*                                                                                */
 /**********************************************************************************/
 
+const $HIDDEN_FROM_SCENEGRAPH = Symbol('meow-hidden')
+
+function hideFromSceneGraph<T extends object>(node: T) {
+  const _node = node as object & { [$HIDDEN_FROM_SCENEGRAPH]: true }
+  _node[$HIDDEN_FROM_SCENEGRAPH] = true
+  return _node
+}
+
+function isHiddenFromSceneGraph<T extends object>(node: T) {
+  return $HIDDEN_FROM_SCENEGRAPH in node
+}
+
 function SceneGraph(props: {
   onSelect(node: THREE.Object3D): void
   isNodeSelected: (node: THREE.Object3D) => boolean
@@ -164,7 +177,7 @@ function SceneGraph(props: {
     )
 
     return (
-      <Show when={!($HIDDEN in nodeProps.node)}>
+      <Show when={!isHiddenFromSceneGraph(nodeProps.node)}>
         <Show when={nodeProps.node.children.length > 0} fallback={button}>
           <div class={clsx(styles.row, props.isNodeSelected(nodeProps.node) && styles.selected)}>
             {button}
@@ -425,12 +438,25 @@ const App: Component = () => {
 
         createEffect(() => {
           if (mode() === 'cinema') return
-          const axesHelper = new THREE.AxesHelper(0.25)
-          axesHelper[$HIDDEN] = true
-          threeManager.scene.add(axesHelper)
+          if (selectedNode() === threeManager.scene) return
 
-          createEffect(() => axesHelper.position.copy(selectedNode().position))
-          onCleanup(() => threeManager.scene.remove(axesHelper))
+          const transformControls = new TransformControls(
+            threeManager.camera,
+            threeManager.renderer.domElement,
+          ) as TransformControls
+          hideFromSceneGraph(transformControls)
+          transformControls.attach(selectedNode())
+          threeManager.scene.add(transformControls)
+
+          transformControls.addEventListener('dragging-changed', ({ value }) => {
+            console.log('dragging', value)
+            threeManager.orbitControls.enabled = !value
+          })
+
+          onCleanup(() => {
+            transformControls.detach()
+            threeManager.scene.remove(transformControls)
+          })
         })
 
         /* Load default model */
