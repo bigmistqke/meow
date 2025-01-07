@@ -8,6 +8,7 @@ body {
   --color-handle-hover: rgb(168, 168, 168);
   --color-scrollbar: rgb(172 172 172);
   --color-scene-graph-selected: rgb(208, 208, 208);
+  --color-texture-bg: rgb(208, 208, 208);
   --height-input: 24px;
   --gap: 5px;
   overscroll-behavior-y: none;

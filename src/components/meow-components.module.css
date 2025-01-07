@@ -120,7 +120,35 @@
 }
 
 .textureInput {
-  background: var(--color-bg);
+  /* Define the width and height of the checkerboard squares */
+  --square-size: 10px; /* Size of each square */
+
+  /* Set up the background with repeating linear gradients */
+  background-image: linear-gradient(
+      45deg,
+      var(--color-texture-bg) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-texture-bg) 75%,
+      var(--color-texture-bg)
+    ),
+    linear-gradient(
+      45deg,
+      var(--color-texture-bg) 25%,
+      transparent 25%,
+      transparent 75%,
+      var(--color-texture-bg) 75%,
+      var(--color-texture-bg)
+    );
+
+  /* Set the background position to align the gradients */
+  background-position:
+    0 0,
+    var(--square-size) var(--square-size);
+
+  /* Define the size of each tile (twice the size of a square to complete the pattern) */
+  background-size: calc(2 * var(--square-size)) calc(2 * var(--square-size));
+
   min-height: var(--height-input);
 
   & canvas {
