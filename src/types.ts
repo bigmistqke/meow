@@ -5,12 +5,12 @@ import { GLTF } from 'three-stdlib'
 
 export interface Extension {
   name: string
-  setup?(state: MeowState): Promise<void>
-  tick?(state: MeowState): void
+  setup?(object: Object3D): Promise<void>
+  tick?(object: Object3D): void
   /** jsx added to editor pane */
-  widget?(state: MeowState): JSXElement
+  widget?(object: Object3D): JSXElement
   /** jsx overlaid over canvas, visible in editor mode */
-  overlay?(state: MeowState): JSXElement
+  overlay?(object: Object3D): JSXElement
 }
 
 export interface MeowState {

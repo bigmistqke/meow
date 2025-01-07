@@ -8,9 +8,9 @@ import { Mesh } from 'three'
 export default (): Extension => {
   return {
     name: 'Material',
-    widget(state) {
+    widget(object) {
       return (
-        <Show when={state.selectedNode instanceof Mesh && state.selectedNode}>
+        <Show when={object instanceof Mesh && object}>
           {mesh => {
             const [type, setType] = createWritable<
               'MeshBasicMaterial' | 'MeshPhongMaterial' | 'MeshStandardMaterial'
@@ -26,8 +26,6 @@ export default (): Extension => {
               }
             })
 
-            createEffect(() => console.log('mesh().material', mesh().material.map))
-
             return (
               <>
                 <H3>{mesh().name}</H3>
@@ -41,7 +39,7 @@ export default (): Extension => {
                   </Labelled>
                   <Labelled label="color">
                     <ColorInput
-                      value={mesh().material.color}
+                      value={color}
                       onR={r => (mesh().material.color.r = r)}
                       onG={g => (mesh().material.color.g = g)}
                       onB={b => (mesh().material.color.b = b)}

@@ -8,10 +8,13 @@ import {
   createSelector,
   createSignal,
   For,
+  getOwner,
+  Index,
   mapArray,
   on,
   onCleanup,
   onMount,
+  runWithOwner,
   Setter,
   Show,
   type Component,
@@ -26,30 +29,12 @@ import webcam from './extensions/webcam'
 import styles from './meow.module.css'
 import type { Extension, MeowState } from './types'
 import { MeowProvider, useMeow } from './use-meow'
-import { bypass, intercept, interceptProperty } from './utils/intercept-property'
+import { track, trackTracked } from './utils/track'
 import { traverse } from './utils/traverse'
 import { MaterialWidget, TransformWidget } from './widgets'
 
 const BUILTINS = { webcam, material }
 const $HIDDEN = Symbol('meow-hidden')
-
-interceptProperty(THREE.Object3D, 'children', true)
-// Material needs to be a proxy because material can be `Material | Material[]`
-interceptProperty(THREE.Object3D, 'material' /* , true */)
-interceptProperty(THREE.Object3D, 'geometry')
-interceptProperty(THREE.Color, 'r')
-interceptProperty(THREE.Color, 'g')
-interceptProperty(THREE.Color, 'b')
-// Intercept all color/map from all classes extending of material.color
-interceptProperty(THREE.Material, 'color')
-interceptProperty(THREE.Material, 'map')
-interceptProperty(THREE.Vector3, 'x')
-interceptProperty(THREE.Vector3, 'y')
-interceptProperty(THREE.Vector3, 'z')
-// Intercept secret properties of rotation
-interceptProperty(THREE.Euler, '_x')
-interceptProperty(THREE.Euler, '_y')
-interceptProperty(THREE.Euler, '_z')
 
 /**********************************************************************************/
 /*                                                                                */
@@ -114,12 +99,11 @@ function createThreeManager() {
       loader.parse(arrayBuffer, '', setGltf)
     },
     render: () => {
-      bypass(() => {
-        stats.begin()
-        renderer.render(scene, camera)
-        controls.update()
-        stats.end()
-      })
+      stats.begin()
+      trackTracked()
+      renderer.render(scene, camera)
+      controls.update()
+      stats.end()
     },
     renderer,
     resize(domRect: DOMRect) {
@@ -129,28 +113,24 @@ function createThreeManager() {
       renderer.render(scene, camera)
     },
     updatePrediction({ facialTransformationMatrixes, faceBlendshapes }: FaceLandmarkerResult) {
-      bypass(() => {
-        const _gltf = gltf()
-        if (!_gltf) return
+      const _gltf = gltf()
+      if (!_gltf) return
 
-        const matrix = facialTransformationMatrixes[0]?.data as THREE.Matrix4Tuple
-        if (matrix) {
-          intercept(() => {
-            _gltf.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
-          })
-        }
-        faceBlendshapes[0]?.categories.forEach(category => {
-          const name = category.displayName || category.categoryName
-          traverse(_gltf.scene, face => {
-            if (
-              face instanceof THREE.Mesh &&
-              face.morphTargetDictionary &&
-              face.morphTargetInfluences
-            ) {
-              const index = face.morphTargetDictionary[name] as number
-              face.morphTargetInfluences[index] = category.score
-            }
-          })
+      const matrix = facialTransformationMatrixes[0]?.data as THREE.Matrix4Tuple
+      if (matrix) {
+        _gltf.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
+      }
+      faceBlendshapes[0]?.categories.forEach(category => {
+        const name = category.displayName || category.categoryName
+        traverse(_gltf.scene, face => {
+          if (
+            face instanceof THREE.Mesh &&
+            face.morphTargetDictionary &&
+            face.morphTargetInfluences
+          ) {
+            const index = face.morphTargetDictionary[name] as number
+            face.morphTargetInfluences[index] = category.score
+          }
         })
       })
     },
@@ -171,6 +151,8 @@ function SceneGraph(props: {
 
   function Node(nodeProps: { node: THREE.Object3D; layer: number }) {
     const [visible, setVisible] = createSignal(true)
+    const childrenLength = track(nodeProps.node.children, 'length')
+
     const button = (
       <button
         class={clsx(styles.node, props.isNodeSelected(nodeProps.node) && styles.selected)}
@@ -180,6 +162,7 @@ function SceneGraph(props: {
         {nodeProps.node.name || nodeProps.node.type}
       </button>
     )
+
     return (
       <Show when={!($HIDDEN in nodeProps.node)}>
         <Show when={nodeProps.node.children.length > 0} fallback={button}>
@@ -195,9 +178,12 @@ function SceneGraph(props: {
           </div>
         </Show>
         <Show when={visible()}>
-          <For each={'children' in nodeProps.node && nodeProps.node.children}>
-            {node => <Node node={node} layer={nodeProps.layer + 1} />}
-          </For>
+          <Index each={new Array(childrenLength())}>
+            {(_, index) => {
+              const node = track(nodeProps.node.children, index)
+              return <Node node={node()} layer={nodeProps.layer + 1} />
+            }}
+          </Index>
         </Show>
       </Show>
     )
@@ -274,7 +260,7 @@ function EditorPane(props: {
             <Show when={extension.widget}>
               {widget => (
                 <Widget name={extension.name} onDelete={() => props.deleteExtension(extension)}>
-                  {widget()(state)}
+                  {widget()(state, state.selectedNode)}
                 </Widget>
               )}
             </Show>
@@ -385,10 +371,15 @@ const App: Component = () => {
           }
           // Update all extensions
           extensions
-            .values()
-            .forEach(extensions => extensions.forEach(extension => extension.tick?.(state)))
+            .entries()
+            .forEach(([object, extensions]) =>
+              extensions.forEach(extension => extension.tick?.(object)),
+            )
         }
-        threeManager.renderer.setAnimationLoop(animate)
+        const owner = getOwner()
+        threeManager.renderer.setAnimationLoop(timestamp =>
+          runWithOwner(owner, () => animate(timestamp)),
+        )
 
         /* Enable the live webcam view and start detection. */
         async function enableCam() {
@@ -424,7 +415,7 @@ const App: Component = () => {
                 mapArray(
                   () => extensions.get(object),
                   extension => {
-                    extension.setup?.(state)
+                    extension.setup?.(object)
                   },
                 ),
               )
@@ -434,14 +425,12 @@ const App: Component = () => {
 
         createEffect(() => {
           if (mode() === 'cinema') return
-          bypass(() => {
-            const axesHelper = new THREE.AxesHelper(0.25)
-            axesHelper[$HIDDEN] = true
-            threeManager.scene.add(axesHelper)
+          const axesHelper = new THREE.AxesHelper(0.25)
+          axesHelper[$HIDDEN] = true
+          threeManager.scene.add(axesHelper)
 
-            createEffect(() => axesHelper.position.copy(selectedNode().position))
-            onCleanup(() => threeManager.scene.remove(axesHelper))
-          })
+          createEffect(() => axesHelper.position.copy(selectedNode().position))
+          onCleanup(() => threeManager.scene.remove(axesHelper))
         })
 
         /* Load default model */
@@ -487,7 +476,7 @@ const App: Component = () => {
               >
                 <div style={{ position: 'absolute', 'pointer-events': 'none' }}>
                   <For each={extensions.get(selectedNode())}>
-                    {extension => extension.overlay?.(state)}
+                    {extension => extension.overlay?.(selectedNode())}
                   </For>
                 </div>
                 <Show when={mode() === 'editor'}>{threeManager.stats}</Show>

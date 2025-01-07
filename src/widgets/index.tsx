@@ -10,12 +10,20 @@ import {
   Widget,
 } from 'src/components'
 import { createWritable } from 'src/utils/create-writable'
+import { track } from 'src/utils/track'
 import * as THREE from 'three'
 
 export function MaterialWidget(props: { node: THREE.Mesh }) {
+  // Updates whenever props.node.material is set
+  const material = track(() => props.node, 'material')
+  // Updates whenever props.node.material.color is set
+  const color = track(material, 'color')
+  // Updates whenever the r,g,b-value of props.node.material.color is set
+  const rgb = track(color, ['r', 'g', 'b'])
+
   const [type, setType] = createWritable<
     'MeshBasicMaterial' | 'MeshPhongMaterial' | 'MeshStandardMaterial'
-  >(() => props.node.material.type)
+  >(() => material().type)
 
   createEffect(() => {
     if (type() !== props.node.material.type) {
@@ -26,8 +34,6 @@ export function MaterialWidget(props: { node: THREE.Mesh }) {
       props.node.material.map = map
     }
   })
-
-  createEffect(() => console.log('props.node.material', props.node.material.map))
 
   return (
     <Widget name="Material">
@@ -42,7 +48,7 @@ export function MaterialWidget(props: { node: THREE.Mesh }) {
         </Labelled>
         <Labelled label="color">
           <ColorInput
-            value={props.node.material.color}
+            value={rgb}
             onR={r => (props.node.material.color.r = r)}
             onG={g => (props.node.material.color.g = g)}
             onB={b => (props.node.material.color.b = b)}
@@ -60,12 +66,15 @@ export function MaterialWidget(props: { node: THREE.Mesh }) {
 }
 
 export function TransformWidget(props: { node: THREE.Object3D }) {
+  const position = track(() => props.node.position, ['x', 'y', 'z'])
+  const rotation = track(() => props.node.rotation, ['x', 'y', 'z'])
+  const scale = track(() => props.node.scale, ['x', 'y', 'z'])
   return (
     <Widget name="Transform">
       <List>
         <Labelled label="position">
           <Vector3Input
-            value={props.node.position}
+            value={position}
             onX={x => (props.node.position.x = x)}
             onY={y => (props.node.position.y = y)}
             onZ={z => (props.node.position.z = z)}
@@ -73,7 +82,7 @@ export function TransformWidget(props: { node: THREE.Object3D }) {
         </Labelled>
         <Labelled label="rotation">
           <Vector3Input
-            value={props.node.rotation}
+            value={rotation}
             onX={x => (props.node.rotation.x = x)}
             onY={y => (props.node.rotation.y = y)}
             onZ={z => (props.node.rotation.z = z)}
@@ -81,7 +90,7 @@ export function TransformWidget(props: { node: THREE.Object3D }) {
         </Labelled>
         <Labelled label="scale">
           <Vector3Input
-            value={props.node.scale}
+            value={scale}
             onX={x => (props.node.scale.x = x)}
             onY={y => (props.node.scale.y = y)}
             onZ={z => (props.node.scale.z = z)}

@@ -2,6 +2,7 @@ import { DrawingUtils, FaceLandmarker, FaceLandmarkerResult } from '@mediapipe/t
 import { createEffect, createSignal } from 'solid-js'
 import { Button, Labelled, List, NumberInput } from 'src/components'
 import { Extension } from 'src/types'
+import { useMeow } from 'src/use-meow'
 
 function drawLandmarks(faceLandmarkerResult: FaceLandmarkerResult, drawingUtils: DrawingUtils) {
   for (const landmarks of faceLandmarkerResult.faceLandmarks) {
@@ -53,7 +54,8 @@ export default (): Extension => {
 
   return {
     name: 'Webcam Debugger',
-    async setup(state) {
+    async setup() {
+      const state = useMeow()
       createEffect(() => {
         if (!state.stream) return
         video.srcObject = state.stream
@@ -74,7 +76,8 @@ export default (): Extension => {
         canvas.height = video.videoHeight
       })
     },
-    tick(state) {
+    tick() {
+      const state = useMeow()
       if (state.prediction) {
         ctx.clearRect(0, 0, video.videoWidth, video.videoHeight)
         drawLandmarks(state.prediction, drawingUtils)

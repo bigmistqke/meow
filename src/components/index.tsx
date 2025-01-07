@@ -9,7 +9,7 @@ import {
   Show,
   Switch,
 } from 'solid-js'
-import { Color, Euler, Texture, TextureLoader, Vector3 } from 'three'
+import { Texture, TextureLoader } from 'three'
 import styles from './meow-components.module.css'
 
 /**********************************************************************************/
@@ -133,13 +133,11 @@ export function Select<const T extends string[]>(props: {
 }
 
 export function Vector3Input(props: {
-  value: Vector3 | Euler
+  value: { x: number; y: number; z: number }
   onX: (value: number) => void
   onY: (value: number) => void
   onZ: (value: number) => void
 }) {
-  /* createEffect(() => console.log(props.value.x)) */
-
   return (
     <div class={styles.vector3Input}>
       <NumberInput step={0.1} value={props.value.x} onInput={props.onX} />
@@ -150,7 +148,7 @@ export function Vector3Input(props: {
 }
 
 export function ColorInput(props: {
-  value: Color
+  value: { r: number; g: number; b: number }
   onR: (value: number) => void
   onG: (value: number) => void
   onB: (value: number) => void
