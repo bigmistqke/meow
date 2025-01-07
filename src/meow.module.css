@@ -82,19 +82,6 @@ body {
   overflow: auto;
 }
 
-.section {
-  & .sectionHeader {
-    display: grid;
-    position: sticky;
-    top: 0px;
-    grid-template-columns: 1fr auto auto;
-    gap: 5px;
-    background: var(--color-pane-bg);
-    padding: 5px;
-    font-family: GeistMonoBold;
-  }
-}
-
 [data-active-pane] {
   user-select: none;
 }

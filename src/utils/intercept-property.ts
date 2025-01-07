@@ -7,7 +7,7 @@ function trigger<T>(initialValue: T | void) {
 }
 
 const $LENGTH = Symbol()
-const $RAW = Symbol()
+export const $VALUE = Symbol()
 const PROXIES = new WeakMap()
 
 let UNPROXY = false
@@ -27,7 +27,7 @@ export function intercept<T>(cb: () => T): T {
 }
 
 export function raw<T>(value: T): T {
-  return typeof value === 'object' && value !== null ? value[$RAW] ?? value : value
+  return typeof value === 'object' && value !== null ? value[$VALUE] ?? value : value
 }
 
 export function createProxy<T extends object>(node: T): T {
@@ -37,7 +37,7 @@ export function createProxy<T extends object>(node: T): T {
 
   const proxy = new Proxy(node, {
     get(target, property) {
-      if (property === $RAW) {
+      if (property === $VALUE) {
         return node
       }
 

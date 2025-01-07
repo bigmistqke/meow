@@ -9,26 +9,26 @@ export default (): Extension => {
         <List>
           <Labelled label="position">
             <Vector3Input
-              value={state.scene.position}
-              onX={x => (state.scene.position.x = x)}
-              onY={y => (state.scene.position.y = y)}
-              onZ={z => (state.scene.position.z = z)}
+              value={state.selectedNode.position}
+              onX={x => (state.selectedNode.position.x = x)}
+              onY={y => (state.selectedNode.position.y = y)}
+              onZ={z => (state.selectedNode.position.z = z)}
             />
           </Labelled>
           <Labelled label="rotation">
             <Vector3Input
-              value={state.scene.rotation}
-              onX={x => (state.scene.rotation.x = x)}
-              onY={y => (state.scene.rotation.y = y)}
-              onZ={z => (state.scene.rotation.z = z)}
+              value={state.selectedNode.rotation}
+              onX={x => (state.selectedNode.rotation.x = x)}
+              onY={y => (state.selectedNode.rotation.y = y)}
+              onZ={z => (state.selectedNode.rotation.z = z)}
             />
           </Labelled>
           <Labelled label="scale">
             <Vector3Input
-              value={state.scene.scale}
-              onX={x => (state.scene.scale.x = x)}
-              onY={y => (state.scene.scale.y = y)}
-              onZ={z => (state.scene.scale.z = z)}
+              value={state.selectedNode.scale}
+              onX={x => (state.selectedNode.scale.x = x)}
+              onY={y => (state.selectedNode.scale.y = y)}
+              onZ={z => (state.selectedNode.scale.z = z)}
             />
           </Labelled>
         </List>

@@ -1,6 +1,6 @@
 import { FaceLandmarkerResult } from '@mediapipe/tasks-vision'
 import { JSXElement } from 'solid-js'
-import { Scene } from 'three'
+import { Object3D, Scene } from 'three'
 import { GLTF } from 'three-stdlib'
 
 export interface Extension {
@@ -18,4 +18,5 @@ export interface MeowState {
   gltf: GLTF | undefined
   scene: Scene
   stream: MediaStream | undefined
+  selectedNode: Object3D
 }

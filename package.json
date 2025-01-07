@@ -86,6 +86,7 @@
   "dependencies": {
     "@bigmistqke/solid-grid-split": "^0.0.2",
     "@mediapipe/tasks-vision": "^0.10.18",
+    "@solid-primitives/map": "^0.5.0",
     "clsx": "^2.1.1",
     "solid-js": "^1.6.0",
     "stats.js": "^0.17.0",

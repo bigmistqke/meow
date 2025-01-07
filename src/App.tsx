@@ -1,5 +1,6 @@
 import { Split } from '@bigmistqke/solid-grid-split'
 import { FaceLandmarker, FaceLandmarkerResult, FilesetResolver } from '@mediapipe/tasks-vision'
+import { ReactiveMap } from '@solid-primitives/map'
 import clsx from 'clsx'
 import {
   createEffect,
@@ -14,19 +15,19 @@ import {
   Show,
   type Component,
 } from 'solid-js'
-import { createStore, produce, SetStoreFunction } from 'solid-js/store'
 import Stats from 'stats.js'
 import * as THREE from 'three'
 import { GLTF, GLTFLoader, OrbitControls } from 'three-stdlib'
 import avatar from './assets/avatar.glb?url'
-import { Button, HoverButton } from './components'
+import { Button, HoverButton, Widget } from './components'
 import material from './extensions/material'
-import transform from './extensions/transform'
 import webcam from './extensions/webcam'
 import styles from './meow.module.css'
 import type { Extension, MeowState } from './types'
+import { MeowProvider, useMeow } from './use-meow'
 import { bypass, interceptProperty } from './utils/intercept-property'
 import { traverse } from './utils/traverse'
+import { MaterialWidget, TransformWidget } from './widgets'
 
 const BUILTINS = { webcam, material }
 
@@ -42,6 +43,12 @@ interceptProperty(THREE.Material, 'map')
 interceptProperty(THREE.Vector3, 'x')
 interceptProperty(THREE.Vector3, 'y')
 interceptProperty(THREE.Vector3, 'z')
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                Create Three Manager                            */
+/*                                                                                */
+/**********************************************************************************/
 
 function createThreeManager() {
   const [gltf, setGltf] = createSignal<GLTF>()
@@ -141,38 +148,18 @@ function createThreeManager() {
   }
 }
 
-function ExtensionComponent(props: { extension: Extension; delete: () => void; state: MeowState }) {
-  const [visible, setVisible] = createSignal(true)
-  return (
-    <>
-      <section class={styles.section}>
-        <header class={styles.sectionHeader}>
-          <h2>{props.extension.name}</h2>
-          <Button onClick={() => setVisible(visible => !visible)}>
-            {visible() ? 'min' : 'max'}
-          </Button>
-          <Button
-            style={{
-              'aspect-ratio': 1,
-            }}
-            onClick={props.delete}
-          >
-            x
-          </Button>
-        </header>
-        <Show when={visible()}>
-          <div>{props.extension.widget?.(props.state)}</div>
-        </Show>
-      </section>
-    </>
-  )
-}
+/**********************************************************************************/
+/*                                                                                */
+/*                                   Scene Graph                                  */
+/*                                                                                */
+/**********************************************************************************/
 
 function SceneGraph(props: {
-  state: MeowState
   onSelect(node: THREE.Object3D): void
   isNodeSelected: (node: THREE.Object3D) => boolean
 }) {
+  const state = useMeow()
+
   function Node(nodeProps: { node: THREE.Object3D; layer: number }) {
     const [visible, setVisible] = createSignal(true)
     const button = (
@@ -208,20 +195,28 @@ function SceneGraph(props: {
   }
   return (
     <Split.Pane size="250px" min="450px" max="50px" class={styles.sceneGraph}>
-      <Node node={props.state.scene} layer={1} />
+      <Node node={state.scene} layer={1} />
     </Split.Pane>
   )
 }
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                  Editor Pane                                   */
+/*                                                                                */
+/**********************************************************************************/
 
 function EditorPane(props: {
   enabled: boolean
   setEnabled: Setter<boolean>
   extensions: Array<Extension>
-  setExtensions: SetStoreFunction<Array<Extension>>
-  state: MeowState
+  addExtension: (value: Extension) => void
+  deleteExtension: (value: Extension) => void
   threeManager: ReturnType<typeof createThreeManager>
   onCloseMenu: () => void
 }) {
+  const state = useMeow()
+
   const [addOpened, setAddOpened] = createSignal()
   let fileInput: HTMLInputElement
 
@@ -261,15 +256,19 @@ function EditorPane(props: {
         <Button onClick={props.onCloseMenu}>cinema</Button>
       </div>
       <div class={styles.extensions}>
+        <TransformWidget node={state.selectedNode} />
+        <Show when={state.selectedNode instanceof THREE.Mesh && state.selectedNode}>
+          {node => <MaterialWidget node={node()} />}
+        </Show>
         <For each={props.extensions}>
-          {(extension, index) => (
-            <ExtensionComponent
-              extension={extension}
-              state={props.state}
-              delete={() =>
-                props.setExtensions(produce(extensions => extensions.splice(index(), 1)))
-              }
-            />
+          {extension => (
+            <Show when={extension.widget}>
+              {widget => (
+                <Widget name={extension.name} onDelete={() => props.deleteExtension(extension)}>
+                  {widget()(state)}
+                </Widget>
+              )}
+            </Show>
           )}
         </For>
         <Button onClick={() => setAddOpened(bool => !bool)}>
@@ -281,11 +280,7 @@ function EditorPane(props: {
               {([name, extension]) => (
                 <Button
                   onClick={() => {
-                    props.setExtensions(
-                      produce(extensions =>
-                        extensions.push(typeof extension === 'function' ? extension() : extension),
-                      ),
-                    )
+                    props.addExtension(typeof extension === 'function' ? extension() : extension)
                     setAddOpened(false)
                   }}
                 >
@@ -300,6 +295,12 @@ function EditorPane(props: {
   )
 }
 
+/**********************************************************************************/
+/*                                                                                */
+/*                                       App                                      */
+/*                                                                                */
+/**********************************************************************************/
+
 const App: Component = () => {
   const threeManager = createThreeManager()
   const video = (<video hidden />) as HTMLVideoElement
@@ -310,11 +311,9 @@ const App: Component = () => {
   const [stream, setStream] = createSignal<MediaStream | undefined>()
   const [camEnabled, setCamEnabled] = createSignal(true)
   const [videoLoaded, setVideoLoaded] = createSignal(false)
-  const [extensions, setExtensions] = createStore<Array<Extension>>([
-    transform(),
-    material(),
-    webcam(),
-  ])
+  const extensions = new ReactiveMap<THREE.Object3D, Array<Extension>>()
+  extensions.set(threeManager.scene, [webcam()])
+
   const [faceLandmarker] = createResource(async function createFaceLandmarker() {
     const filesetResolver = await FilesetResolver.forVisionTasks(
       'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm',
@@ -331,6 +330,11 @@ const App: Component = () => {
     })
   })
 
+  const isNodeSelected = createSelector(
+    selectedNode,
+    (node: THREE.Object3D, selectedNode) => node === selectedNode,
+  )
+
   const state: MeowState = {
     get gltf() {
       return threeManager.gltf()
@@ -339,136 +343,170 @@ const App: Component = () => {
       return prediction()
     },
     scene: threeManager.scene,
+    get selectedNode() {
+      return selectedNode()
+    },
     get stream() {
       return stream()
     },
   }
 
-  const isNodeSelected = createSelector(
-    selectedNode,
-    (node: THREE.Object3D, selectedNode) => node === selectedNode,
-  )
-
-  /* Predict */
-  let _lastVideoTime = -1
-  let _prediction: undefined | FaceLandmarkerResult = undefined
-  function predict(timestamp: number) {
-    const landmarker = faceLandmarker()
-    if (!landmarker || !camEnabled()) return
-    if (_lastVideoTime !== video.currentTime || !_prediction) {
-      _prediction = landmarker.detectForVideo(video, timestamp)
-      _lastVideoTime = video.currentTime
-      setPrediction(_prediction)
-      threeManager.updatePrediction(_prediction)
-    }
-  }
-
-  /* Animation loop */
-  function animate(timestamp: number) {
-    threeManager.render()
-    if (videoLoaded()) {
-      predict(timestamp)
-    }
-    // Update all extensions
-    extensions.forEach(extension => extension.tick?.(state))
-  }
-  threeManager.renderer.setAnimationLoop(animate)
-
-  /* Enable the live webcam view and start detection. */
-  async function enableCam() {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-    })
-    video.srcObject = stream
-    setStream(stream)
-    video.addEventListener('loadeddata', () => {
-      video.play()
-      setVideoLoaded(true)
-    })
-  }
-
-  createEffect(() => {
-    if (!faceLandmarker()) return
-    createEffect(() => {
-      if (camEnabled()) {
-        enableCam()
-      } else {
-        video.pause()
-        setStream()
-      }
-    })
-  })
-
-  /* Setup all the extensions */
-  createEffect(
-    mapArray(
-      () => extensions,
-      extension => extension.setup?.(state),
-    ),
-  )
-
-  /* Load default model */
-  onMount(() => threeManager.loadFromUrl(avatar))
-
   return (
-    <>
-      <Show when={!visible()}>
-        <Button
-          style={{
-            position: 'absolute',
-            'z-index': 1,
-            top: '0px',
-            right: '0px',
-            margin: 'var(--gap)',
-          }}
-          onClick={() => setVisible(true)}
-        >
-          editor
-        </Button>
-      </Show>
-      <Split
-        style={{
-          height: '100vh',
-          overflow: 'hidden',
-        }}
-      >
-        <Show when={visible()}>
-          <SceneGraph state={state} onSelect={setSelectedNode} isNodeSelected={isNodeSelected} />
-          <Split.Handle size="5px" class={styles.handle} />
-        </Show>
-        <Split.Pane
-          size="1fr"
-          style={{ position: 'relative', overflow: 'hidden', translate: '0px 0px 0px' }}
-          ref={element => {
-            onMount(() => {
-              const observer = new ResizeObserver(() => {
-                threeManager.resize(element.getBoundingClientRect())
-              })
-              observer.observe(element)
-            })
-          }}
-        >
-          <div style={{ position: 'absolute', 'pointer-events': 'none' }}>
-            <For each={extensions}>{extension => extension.overlay?.(state)}</For>
-          </div>
-          <Show when={visible()}>{threeManager.stats}</Show>
-          {video}
-          {threeManager.canvas}
-        </Split.Pane>
-        <Show when={visible()}>
-          <Split.Handle size="5px" class={styles.handle} />
-          <EditorPane
-            enabled={camEnabled()}
-            extensions={extensions}
-            setEnabled={setCamEnabled}
-            setExtensions={setExtensions}
-            state={state}
-            threeManager={threeManager}
-            onCloseMenu={() => setVisible(false)}
-          />
-        </Show>
-      </Split>
-    </>
+    <MeowProvider value={state}>
+      {(() => {
+        /* Predict */
+        let _lastVideoTime = -1
+        let _prediction: undefined | FaceLandmarkerResult = undefined
+        function predict(timestamp: number) {
+          const landmarker = faceLandmarker()
+          if (!landmarker || !camEnabled()) return
+          if (_lastVideoTime !== video.currentTime || !_prediction) {
+            _prediction = landmarker.detectForVideo(video, timestamp)
+            _lastVideoTime = video.currentTime
+            setPrediction(_prediction)
+            threeManager.updatePrediction(_prediction)
+          }
+        }
+
+        /* Animation loop */
+        function animate(timestamp: number) {
+          threeManager.render()
+          if (videoLoaded()) {
+            predict(timestamp)
+          }
+          // Update all extensions
+          extensions
+            .values()
+            .forEach(extensions => extensions.forEach(extension => extension.tick?.(state)))
+        }
+        threeManager.renderer.setAnimationLoop(animate)
+
+        /* Enable the live webcam view and start detection. */
+        async function enableCam() {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+          })
+          video.srcObject = stream
+          setStream(stream)
+          video.addEventListener('loadeddata', () => {
+            video.play()
+            setVideoLoaded(true)
+          })
+        }
+
+        createEffect(() => {
+          if (!faceLandmarker()) return
+          createEffect(() => {
+            if (camEnabled()) {
+              enableCam()
+            } else {
+              video.pause()
+              setStream()
+            }
+          })
+        })
+
+        /* Setup all the extensions */
+        createEffect(
+          mapArray(
+            () => [...extensions.keys()],
+            object => {
+              createEffect(
+                mapArray(
+                  () => extensions.get(object),
+                  extension => {
+                    extension.setup?.(state)
+                  },
+                ),
+              )
+            },
+          ),
+        )
+
+        /* Load default model */
+        onMount(() => threeManager.loadFromUrl(avatar))
+        return (
+          <>
+            <Show when={!visible()}>
+              <Button
+                style={{
+                  position: 'absolute',
+                  'z-index': 1,
+                  top: '0px',
+                  right: '0px',
+                  margin: 'var(--gap)',
+                }}
+                onClick={() => setVisible(true)}
+              >
+                editor
+              </Button>
+            </Show>
+            <Split
+              style={{
+                height: '100vh',
+                overflow: 'hidden',
+              }}
+            >
+              <Show when={visible()}>
+                <SceneGraph onSelect={setSelectedNode} isNodeSelected={isNodeSelected} />
+                <Split.Handle size="5px" class={styles.handle} />
+              </Show>
+              <Split.Pane
+                size="1fr"
+                style={{ position: 'relative', overflow: 'hidden', translate: '0px 0px 0px' }}
+                ref={element => {
+                  onMount(() => {
+                    const observer = new ResizeObserver(() => {
+                      threeManager.resize(element.getBoundingClientRect())
+                    })
+                    observer.observe(element)
+                  })
+                }}
+              >
+                <div style={{ position: 'absolute', 'pointer-events': 'none' }}>
+                  <For each={extensions.get(selectedNode())}>
+                    {extension => extension.overlay?.(state)}
+                  </For>
+                </div>
+                <Show when={visible()}>{threeManager.stats}</Show>
+                {video}
+                {threeManager.canvas}
+              </Split.Pane>
+              <Show when={visible()}>
+                <Split.Handle size="5px" class={styles.handle} />
+                <EditorPane
+                  enabled={camEnabled()}
+                  extensions={extensions.get(selectedNode()) || []}
+                  addExtension={extension => {
+                    if (!extensions.has(selectedNode())) {
+                      extensions.set(selectedNode(), [extension])
+                    } else {
+                      extensions.set(selectedNode(), [
+                        ...extensions.get(selectedNode())!,
+                        extension,
+                      ])
+                    }
+                  }}
+                  deleteExtension={extension => {
+                    if (extensions.has(selectedNode())) {
+                      extensions.set(
+                        selectedNode(),
+                        extensions
+                          .get(selectedNode())!
+                          .filter(_extension => _extension !== extension),
+                      )
+                    }
+                  }}
+                  setEnabled={setCamEnabled}
+                  threeManager={threeManager}
+                  onCloseMenu={() => setVisible(false)}
+                />
+              </Show>
+            </Split>
+          </>
+        )
+      })()}
+    </MeowProvider>
   )
 }
 

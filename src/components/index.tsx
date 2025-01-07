@@ -1,7 +1,15 @@
 import clsx from 'clsx'
-import { For, JSX, Match, onMount, ParentProps, Switch } from 'solid-js'
+import {
+  createRenderEffect,
+  createSignal,
+  For,
+  JSX,
+  Match,
+  ParentProps,
+  Show,
+  Switch,
+} from 'solid-js'
 import { Color, Euler, Texture, TextureLoader, Vector3 } from 'three'
-import { bypass } from '../utils/intercept-property'
 import styles from './meow-components.module.css'
 
 /**********************************************************************************/
@@ -25,6 +33,31 @@ export function List(props: ParentProps) {
 
 export function H3(props: ParentProps) {
   return <h3 class={styles.h3}>{props.children}</h3>
+}
+
+export function Widget(props: ParentProps<{ name: string; onDelete?: () => void }>) {
+  const [visible, setVisible] = createSignal(true)
+  return (
+    <section class={styles.widget}>
+      <header class={styles.header}>
+        <h2>{props.name}</h2>
+        <Button onClick={() => setVisible(visible => !visible)}>{visible() ? 'min' : 'max'}</Button>
+        <Show when={props.onDelete}>
+          <Button
+            style={{
+              'aspect-ratio': 1,
+            }}
+            onClick={props.onDelete!}
+          >
+            x
+          </Button>
+        </Show>
+      </header>
+      <Show when={visible()}>
+        <div>{props.children}</div>
+      </Show>
+    </section>
+  )
 }
 
 /**********************************************************************************/
@@ -141,21 +174,15 @@ export function ColorInput(props: {
 }
 
 function CanvasFromBitmap(props: { bitmap: ImageBitmap; class?: string }) {
-  console.log('mount')
   return (
     <canvas
       class={props.class}
       ref={element => {
-        onMount(() => {
+        createRenderEffect(() => {
           element.width = props.bitmap.width
           element.height = props.bitmap.height
           const ctx = element.getContext('2d')!
-
-          ctx.drawImage(
-            bypass(() => props.bitmap),
-            0,
-            0,
-          )
+          ctx.drawImage(props.bitmap, 0, 0)
         })
       }}
     />
@@ -168,6 +195,7 @@ export function TextureInput(props: {
   onInput: (texture: Texture) => void
 }) {
   let input: HTMLInputElement
+
   return (
     <>
       <input
