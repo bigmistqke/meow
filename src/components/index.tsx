@@ -138,6 +138,8 @@ export function Vector3Input(props: {
   onY: (value: number) => void
   onZ: (value: number) => void
 }) {
+  /* createEffect(() => console.log(props.value.x)) */
+
   return (
     <div class={styles.vector3Input}>
       <NumberInput step={0.1} value={props.value.x} onInput={props.onX} />

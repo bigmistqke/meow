@@ -25,7 +25,7 @@ import webcam from './extensions/webcam'
 import styles from './meow.module.css'
 import type { Extension, MeowState } from './types'
 import { MeowProvider, useMeow } from './use-meow'
-import { bypass, interceptProperty } from './utils/intercept-property'
+import { bypass, intercept, interceptProperty } from './utils/intercept-property'
 import { traverse } from './utils/traverse'
 import { MaterialWidget, TransformWidget } from './widgets'
 
@@ -38,11 +38,16 @@ interceptProperty(THREE.Object3D, 'geometry')
 interceptProperty(THREE.Color, 'r')
 interceptProperty(THREE.Color, 'g')
 interceptProperty(THREE.Color, 'b')
+// Intercept all color/map from all classes extending of material.color
 interceptProperty(THREE.Material, 'color')
 interceptProperty(THREE.Material, 'map')
 interceptProperty(THREE.Vector3, 'x')
 interceptProperty(THREE.Vector3, 'y')
 interceptProperty(THREE.Vector3, 'z')
+// Intercept secret properties of rotation
+interceptProperty(THREE.Euler, '_x')
+interceptProperty(THREE.Euler, '_y')
+interceptProperty(THREE.Euler, '_z')
 
 /**********************************************************************************/
 /*                                                                                */
@@ -128,7 +133,9 @@ function createThreeManager() {
 
         const matrix = facialTransformationMatrixes[0]?.data as THREE.Matrix4Tuple
         if (matrix) {
-          _gltf.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
+          intercept(() => {
+            _gltf.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
+          })
         }
         faceBlendshapes[0]?.categories.forEach(category => {
           const name = category.displayName || category.categoryName
