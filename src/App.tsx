@@ -41,6 +41,8 @@ const BUILTINS = { webcam, material }
 /*                                                                                */
 /**********************************************************************************/
 
+type ThreeManager = ReturnType<typeof createThreeManager>
+
 function createThreeManager() {
   const [gltf, setGltf] = createSignal<GLTF>()
   const canvas = (
@@ -210,6 +212,69 @@ function SceneGraph(props: {
 
 /**********************************************************************************/
 /*                                                                                */
+/*                                 Transform Pane                                 */
+/*                                                                                */
+/**********************************************************************************/
+
+function TransformPane(props: { displayMode: 'cinema' | 'editor'; threeManager: ThreeManager }) {
+  const [mode, setMode] = createSignal<'translate' | 'rotate' | 'scale'>('translate')
+  const [space, setSpace] = createSignal<'global' | 'local'>('global')
+  const meow = useMeow()
+
+  createEffect(() => {
+    if (props.displayMode === 'cinema') return
+    if (meow.selectedNode === meow.scene) return
+
+    const transformControls = new TransformControls(
+      props.threeManager.camera,
+      props.threeManager.renderer.domElement,
+    ) as TransformControls
+
+    hideFromSceneGraph(transformControls)
+    transformControls.attach(meow.selectedNode)
+    props.threeManager.scene.add(transformControls)
+
+    transformControls.addEventListener('dragging-changed', ({ value }) => {
+      console.log('dragging', value)
+      props.threeManager.orbitControls.enabled = !value
+    })
+
+    createEffect(() => transformControls.setMode(mode()))
+    createEffect(() => transformControls.setSpace(space()))
+
+    onCleanup(() => {
+      transformControls.detach()
+      props.threeManager.scene.remove(transformControls)
+    })
+  })
+
+  return (
+    <div class={styles.transformPane}>
+      <div>
+        <Button selected={mode() === 'translate'} onClick={() => setMode('translate')}>
+          translate
+        </Button>
+        <Button selected={mode() === 'rotate'} onClick={() => setMode('rotate')}>
+          rotate
+        </Button>
+        <Button selected={mode() === 'scale'} onClick={() => setMode('scale')}>
+          scale
+        </Button>
+      </div>
+      <div>
+        <Button selected={space() === 'global'} onClick={() => setSpace('global')}>
+          global
+        </Button>
+        <Button selected={space() === 'local'} onClick={() => setSpace('local')}>
+          local
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/**********************************************************************************/
+/*                                                                                */
 /*                                  Editor Pane                                   */
 /*                                                                                */
 /**********************************************************************************/
@@ -314,7 +379,7 @@ const App: Component = () => {
   const video = (<video hidden />) as HTMLVideoElement
 
   const [selectedNode, setSelectedNode] = createSignal(threeManager.scene)
-  const [mode, setMode] = createSignal<'editor' | 'cinema'>('editor')
+  const [displayMode, setDisplayMode] = createSignal<'editor' | 'cinema'>('editor')
   const [prediction, setPrediction] = createSignal<FaceLandmarkerResult | undefined>()
   const [stream, setStream] = createSignal<MediaStream | undefined>()
   const [camEnabled, setCamEnabled] = createSignal(true)
@@ -436,35 +501,12 @@ const App: Component = () => {
           ),
         )
 
-        createEffect(() => {
-          if (mode() === 'cinema') return
-          if (selectedNode() === threeManager.scene) return
-
-          const transformControls = new TransformControls(
-            threeManager.camera,
-            threeManager.renderer.domElement,
-          ) as TransformControls
-          hideFromSceneGraph(transformControls)
-          transformControls.attach(selectedNode())
-          threeManager.scene.add(transformControls)
-
-          transformControls.addEventListener('dragging-changed', ({ value }) => {
-            console.log('dragging', value)
-            threeManager.orbitControls.enabled = !value
-          })
-
-          onCleanup(() => {
-            transformControls.detach()
-            threeManager.scene.remove(transformControls)
-          })
-        })
-
         /* Load default model */
         onMount(() => threeManager.loadFromUrl(avatar))
 
         return (
           <>
-            <Show when={mode() === 'cinema'}>
+            <Show when={displayMode() === 'cinema'}>
               <Button
                 style={{
                   position: 'absolute',
@@ -473,7 +515,7 @@ const App: Component = () => {
                   right: '0px',
                   margin: 'var(--gap)',
                 }}
-                onClick={() => setMode('editor')}
+                onClick={() => setDisplayMode('editor')}
               >
                 editor
               </Button>
@@ -484,7 +526,7 @@ const App: Component = () => {
                 overflow: 'hidden',
               }}
             >
-              <Show when={mode() === 'editor'}>
+              <Show when={displayMode() === 'editor'}>
                 <SceneGraph onSelect={setSelectedNode} isNodeSelected={isNodeSelected} />
                 <Split.Handle size="5px" class={styles.handle} />
               </Show>
@@ -505,11 +547,12 @@ const App: Component = () => {
                     {extension => extension.overlay?.(selectedNode())}
                   </For>
                 </div>
-                <Show when={mode() === 'editor'}>{threeManager.stats}</Show>
+                <Show when={displayMode() === 'editor'}>{threeManager.stats}</Show>
                 {video}
                 {threeManager.canvas}
+                <TransformPane threeManager={threeManager} displayMode={displayMode()} />
               </Split.Pane>
-              <Show when={mode() === 'editor'}>
+              <Show when={displayMode() === 'editor'}>
                 <Split.Handle size="5px" class={styles.handle} />
                 <EditorPane
                   enabled={camEnabled()}
@@ -536,7 +579,7 @@ const App: Component = () => {
                   }}
                   setEnabled={setCamEnabled}
                   threeManager={threeManager}
-                  onCloseMenu={() => setMode('cinema')}
+                  onCloseMenu={() => setDisplayMode('cinema')}
                 />
               </Show>
             </Split>

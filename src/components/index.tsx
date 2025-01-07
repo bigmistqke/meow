@@ -71,10 +71,15 @@ export function Button(
     class?: string
     style?: JSX.CSSProperties
     onClick: (event: MouseEvent) => void
+    selected?: boolean
   }>,
 ) {
   return (
-    <button style={props.style} class={clsx(styles.button, props.class)} onClick={props.onClick}>
+    <button
+      style={props.style}
+      class={clsx(styles.button, props.class, props.selected && styles.selected)}
+      onClick={props.onClick}
+    >
       {props.children}
     </button>
   )

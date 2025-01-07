@@ -56,11 +56,15 @@
   border: none;
   border: 1px solid var(--color-stroke);
   border-radius: 5px;
-  background: var(--color-bg);
+  background: var(--color-button-bg);
   min-height: var(--height-input);
 
   &:hover {
     border: 1px solid var(--color-stroke-hover);
+  }
+
+  &.selected {
+    background: var(--color-button-bg-selected);
   }
 }
 
@@ -87,7 +91,7 @@
   cursor: pointer;
   border: 1px solid var(--color-stroke);
   border-radius: 5px;
-  background: var(--color-bg);
+  background: var(--color-button-bg);
   min-height: var(--height-input);
 
   &:hover {
