@@ -1,5 +1,4 @@
 import { Split } from '@bigmistqke/solid-grid-split'
-import { FaceLandmarker, FaceLandmarkerResult, FilesetResolver } from '@mediapipe/tasks-vision'
 import { ReactiveMap } from '@solid-primitives/map'
 import clsx from 'clsx'
 import {
@@ -10,12 +9,9 @@ import {
   For,
   getOwner,
   Index,
-  mapArray,
-  on,
   onCleanup,
   onMount,
   runWithOwner,
-  Setter,
   Show,
   type Component,
 } from 'solid-js'
@@ -25,15 +21,14 @@ import { GLTF, GLTFLoader, OrbitControls, TransformControls } from 'three-stdlib
 import avatar from './assets/avatar.glb?url'
 import { Button, HoverButton, Widget } from './components'
 import material from './extensions/material'
-import webcam from './extensions/webcam'
+import meowtube from './extensions/meowtube'
 import styles from './meow.module.css'
 import type { Extension, MeowState } from './types'
 import { MeowProvider, useMeow } from './use-meow'
 import { evaluateTrackNodes, track } from './utils/track'
-import { traverse } from './utils/traverse'
 import { MaterialWidget, TransformWidget } from './widgets'
 
-const BUILTINS = { webcam, material }
+const BUILTINS = { meowtube, material }
 
 /**********************************************************************************/
 /*                                                                                */
@@ -44,7 +39,6 @@ const BUILTINS = { webcam, material }
 type ThreeManager = ReturnType<typeof createThreeManager>
 
 function createThreeManager() {
-  const [gltf, setGltf] = createSignal<GLTF>()
   const canvas = (
     <canvas
       style={{ position: 'absolute', top: '0px', bottom: '0px', left: '0px', right: '0px' }}
@@ -75,32 +69,18 @@ function createThreeManager() {
   spot.lookAt(new THREE.Vector3())
   scene.add(spot)
 
-  createEffect(
-    on(gltf, gltf => {
-      if (!gltf) return
-      gltf.scene.name = 'Avatar'
-      scene.add(gltf.scene)
-      traverse(gltf.scene, object => {
-        if (object instanceof THREE.Mesh) {
-          object.material.depthWrite = true
-        }
-      })
-    }),
-  )
-
   return {
     camera,
     canvas,
-    gltf,
     renderer,
     scene,
     stats: stats.dom,
     orbitControls,
-    loadFromUrl(url: string) {
-      loader.load(url, setGltf)
+    loadGLTFFromUrl(url: string) {
+      return new Promise<GLTF>((resolve, reject) => loader.load(url, resolve, undefined, reject))
     },
-    loadFromBinary(arrayBuffer: ArrayBuffer) {
-      loader.parse(arrayBuffer, '', setGltf)
+    loadGLTFFromBinary(arrayBuffer: ArrayBuffer) {
+      return new Promise<GLTF>((resolve, reject) => loader.parse(arrayBuffer, '', resolve, reject))
     },
     render: () => {
       stats.begin()
@@ -114,28 +94,6 @@ function createThreeManager() {
       camera.updateProjectionMatrix()
       renderer.setSize(domRect.width, domRect.height)
       renderer.render(scene, camera)
-    },
-    updatePrediction({ facialTransformationMatrixes, faceBlendshapes }: FaceLandmarkerResult) {
-      const _gltf = gltf()
-      if (!_gltf) return
-
-      const matrix = facialTransformationMatrixes[0]?.data as THREE.Matrix4Tuple
-      if (matrix) {
-        _gltf.scene.setRotationFromMatrix(new THREE.Matrix4(...matrix))
-      }
-      faceBlendshapes[0]?.categories.forEach(category => {
-        const name = category.displayName || category.categoryName
-        traverse(_gltf.scene, face => {
-          if (
-            face instanceof THREE.Mesh &&
-            face.morphTargetDictionary &&
-            face.morphTargetInfluences
-          ) {
-            const index = face.morphTargetDictionary[name] as number
-            face.morphTargetInfluences[index] = category.score
-          }
-        })
-      })
     },
   }
 }
@@ -280,8 +238,6 @@ function TransformPane(props: { displayMode: 'cinema' | 'editor'; threeManager: 
 /**********************************************************************************/
 
 function EditorPane(props: {
-  enabled: boolean
-  setEnabled: Setter<boolean>
   extensions: Array<Extension>
   addExtension: (value: Extension) => void
   deleteExtension: (value: Extension) => void
@@ -299,7 +255,7 @@ function EditorPane(props: {
       const reader = new FileReader()
       reader.onload = function (event) {
         const arrayBuffer = event.target!.result as ArrayBuffer
-        props.threeManager.loadFromBinary(arrayBuffer)
+        props.threeManager.loadGLTFFromBinary(arrayBuffer)
       }
       reader.readAsArrayBuffer(file)
     }
@@ -315,9 +271,6 @@ function EditorPane(props: {
           padding: 'var(--gap)',
         }}
       >
-        <Button onClick={() => props.setEnabled(enabled => !enabled)}>
-          {props.enabled ? 'disable' : 'enable'} cam
-        </Button>
         <Button
           onClick={() => {
             fileInput!.click()
@@ -338,7 +291,7 @@ function EditorPane(props: {
             <Show when={extension.widget}>
               {widget => (
                 <Widget name={extension.name} onDelete={() => props.deleteExtension(extension)}>
-                  {widget()(state, state.selectedNode)}
+                  {widget()(state.selectedNode)}
                 </Widget>
               )}
             </Show>
@@ -353,7 +306,7 @@ function EditorPane(props: {
               {([name, extension]) => (
                 <Button
                   onClick={() => {
-                    props.addExtension(typeof extension === 'function' ? extension() : extension)
+                    props.addExtension(extension(state.selectedNode))
                     setAddOpened(false)
                   }}
                 >
@@ -377,31 +330,10 @@ function EditorPane(props: {
 const App: Component = () => {
   const threeManager = createThreeManager()
   const video = (<video hidden />) as HTMLVideoElement
-
   const [selectedNode, setSelectedNode] = createSignal(threeManager.scene)
   const [displayMode, setDisplayMode] = createSignal<'editor' | 'cinema'>('editor')
-  const [prediction, setPrediction] = createSignal<FaceLandmarkerResult | undefined>()
-  const [stream, setStream] = createSignal<MediaStream | undefined>()
-  const [camEnabled, setCamEnabled] = createSignal(true)
-  const [videoLoaded, setVideoLoaded] = createSignal(false)
+  const [defaultGLTF] = createResource(() => threeManager.loadGLTFFromUrl(avatar))
   const extensions = new ReactiveMap<THREE.Object3D, Array<Extension>>()
-  extensions.set(threeManager.scene, [webcam()])
-
-  const [faceLandmarker] = createResource(async function createFaceLandmarker() {
-    const filesetResolver = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm',
-    )
-    return FaceLandmarker.createFromOptions(filesetResolver, {
-      baseOptions: {
-        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-        delegate: 'GPU',
-      },
-      outputFaceBlendshapes: true,
-      outputFacialTransformationMatrixes: true,
-      runningMode: 'VIDEO',
-      numFaces: 1,
-    })
-  })
 
   const isNodeSelected = createSelector(
     selectedNode,
@@ -409,44 +341,18 @@ const App: Component = () => {
   )
 
   const state: MeowState = {
-    get gltf() {
-      return threeManager.gltf()
-    },
-    get prediction() {
-      return prediction()
-    },
     scene: threeManager.scene,
     get selectedNode() {
       return selectedNode()
-    },
-    get stream() {
-      return stream()
     },
   }
 
   return (
     <MeowProvider value={state}>
       {(() => {
-        /* Predict */
-        let _lastVideoTime = -1
-        let _prediction: undefined | FaceLandmarkerResult = undefined
-        function predict(timestamp: number) {
-          const landmarker = faceLandmarker()
-          if (!landmarker || !camEnabled()) return
-          if (_lastVideoTime !== video.currentTime || !_prediction) {
-            _prediction = landmarker.detectForVideo(video, timestamp)
-            _lastVideoTime = video.currentTime
-            setPrediction(_prediction)
-            threeManager.updatePrediction(_prediction)
-          }
-        }
-
         /* Animation loop */
         function animate(timestamp: number) {
           threeManager.render()
-          if (videoLoaded()) {
-            predict(timestamp)
-          }
           // Update all extensions
           extensions
             .entries()
@@ -459,50 +365,18 @@ const App: Component = () => {
           runWithOwner(owner, () => animate(timestamp)),
         )
 
-        /* Enable the live webcam view and start detection. */
-        async function enableCam() {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-          })
-          video.srcObject = stream
-          setStream(stream)
-          video.addEventListener('loadeddata', () => {
-            video.play()
-            setVideoLoaded(true)
-          })
-        }
-
-        createEffect(() => {
-          if (!faceLandmarker()) return
-          createEffect(() => {
-            if (camEnabled()) {
-              enableCam()
-            } else {
-              video.pause()
-              setStream()
-            }
-          })
-        })
-
-        /* Setup all the extensions */
-        createEffect(
-          mapArray(
-            () => [...extensions.keys()],
-            object => {
-              createEffect(
-                mapArray(
-                  () => extensions.get(object),
-                  extension => {
-                    extension.setup?.(object)
-                  },
-                ),
-              )
-            },
-          ),
-        )
-
         /* Load default model */
-        onMount(() => threeManager.loadFromUrl(avatar))
+        createEffect(() => {
+          try {
+            const gltf = defaultGLTF()
+            console.log('gltf')
+            if (!gltf) return
+            threeManager.scene.add(gltf.scene)
+            extensions.set(gltf.scene, [meowtube(gltf.scene)])
+          } catch (error) {
+            console.error(error)
+          }
+        })
 
         return (
           <>
@@ -550,12 +424,13 @@ const App: Component = () => {
                 <Show when={displayMode() === 'editor'}>{threeManager.stats}</Show>
                 {video}
                 {threeManager.canvas}
-                <TransformPane threeManager={threeManager} displayMode={displayMode()} />
+                <Show when={displayMode() === 'editor'}>
+                  <TransformPane threeManager={threeManager} displayMode={displayMode()} />
+                </Show>
               </Split.Pane>
               <Show when={displayMode() === 'editor'}>
                 <Split.Handle size="5px" class={styles.handle} />
                 <EditorPane
-                  enabled={camEnabled()}
                   extensions={extensions.get(selectedNode()) || []}
                   addExtension={extension => {
                     if (!extensions.has(selectedNode())) {
@@ -577,7 +452,6 @@ const App: Component = () => {
                       )
                     }
                   }}
-                  setEnabled={setCamEnabled}
                   threeManager={threeManager}
                   onCloseMenu={() => setDisplayMode('cinema')}
                 />
